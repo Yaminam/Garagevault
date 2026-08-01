@@ -391,6 +391,7 @@ function Ranked({
           name: `${tail.length} more`,
           total: tail.reduce((sum, row) => sum + row.total, 0),
           count: tail.reduce((sum, row) => sum + row.count, 0),
+          also: [],
         },
       ]
     : head;
@@ -407,6 +408,21 @@ function Ranked({
               {formatMoney(row.total, currency)}
             </span>
           </div>
+
+          {/* A vendor billing in more than one currency says so, side by side.
+              Not converted, and not added to the bar: the bar measures this
+              currency, and a rate the data does not contain would be made up. */}
+          {row.also.length > 0 && (
+            <p className="mt-0.5 text-[10.5px] leading-snug text-ink-3">
+              also{' '}
+              {row.also.map((other, index) => (
+                <span key={other.currency}>
+                  {index > 0 && ', '}
+                  <span className="font-mono">{formatMoney(other.total, other.currency)}</span>
+                </span>
+              ))}
+            </p>
+          )}
           <div className="mt-1.5 h-[6px] w-full">
             <motion.span
               initial={reduce ? false : { width: 0 }}

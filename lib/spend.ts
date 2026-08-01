@@ -41,6 +41,14 @@ export type SpendSlice = {
   name: string;
   total: number;
   count: number;
+  /**
+   * The same vendor's spend in the currencies this series is not denominated
+   * in. Anthropic bills in both dollars and rupees, and a ranking that showed
+   * only one of them read as the whole relationship when it was half of it.
+   * Kept as a separate figure rather than converted: there is no rate in the
+   * data, and inventing one would make up a number.
+   */
+  also: { currency: string; total: number }[];
 };
 
 export type Spend = {
@@ -114,17 +122,37 @@ function monthKey(when: Date): string {
   return `${when.getFullYear()}-${String(when.getMonth() + 1).padStart(2, '0')}`;
 }
 
-/** Ranked totals for one grouping, largest first, empty names dropped. */
-function rank(bills: VaultItem[], nameOf: (item: VaultItem) => string | null): SpendSlice[] {
+/**
+ * Ranked totals for one grouping, largest first, empty names dropped.
+ *
+ * `elsewhere` carries the same names totalled in the other currencies, so a
+ * row can say that the vendor is also billing in rupees without those figures
+ * being mixed into the ranking. Matching is case-insensitive because "OpenAI"
+ * and "openai" are one vendor spelled two ways across imported invoices.
+ */
+function rank(
+  bills: VaultItem[],
+  nameOf: (item: VaultItem) => string | null,
+  elsewhere: Map<string, Map<string, number>> = new Map(),
+): SpendSlice[] {
   const map = new Map<string, SpendSlice>();
   for (const bill of bills) {
     const name = nameOf(bill)?.trim();
     if (!name) continue;
-    const row = map.get(name) ?? { name, total: 0, count: 0 };
+    const row = map.get(name) ?? { name, total: 0, count: 0, also: [] };
     row.total += Math.abs(bill.billing!.amount!);
     row.count += 1;
     map.set(name, row);
   }
+
+  for (const row of map.values()) {
+    const others = elsewhere.get(row.name.toLowerCase());
+    if (!others) continue;
+    row.also = [...others.entries()]
+      .map(([currency, total]) => ({ currency, total }))
+      .sort((a, b) => b.total - a.total);
+  }
+
   return [...map.values()].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
 }
 
@@ -277,6 +305,39 @@ export function analyseSpend(
         amount: bill.billing!.amount,
       }))[0] ?? null;
 
+  /*
+   * The same vendors, totalled in every other currency over the same window
+   * and with each currency's own outliers removed. A vendor billing in both
+   * dollars and rupees would otherwise appear at half its real size, and the
+   * missing half is not visible anywhere on the page. Totals are reported
+   * side by side, never converted: the data carries no exchange rate, and
+   * picking one would be inventing a number.
+   */
+  const windowKeys = new Set(order.map((month) => month.key));
+  const elsewhere = new Map<string, Map<string, number>>();
+
+  for (const code of available) {
+    if (code === currency) continue;
+    const group = bills.filter((bill) => codeOf(bill) === code);
+    const groupFlags = outlierFlags(group.map((bill) => Math.abs(bill.billing!.amount!)));
+
+    group.forEach((bill, index) => {
+      if (groupFlags[index]) return;
+      const iso = dateOf(bill);
+      if (!iso) return;
+      const when = new Date(iso);
+      if (Number.isNaN(when.getTime()) || !windowKeys.has(monthKey(when))) return;
+
+      const name = (bill.billing?.vendor ?? bill.entity)?.trim();
+      if (!name) return;
+
+      const key = name.toLowerCase();
+      const inner = elsewhere.get(key) ?? new Map<string, number>();
+      inner.set(code, (inner.get(code) ?? 0) + Math.abs(bill.billing!.amount!));
+      elsewhere.set(key, inner);
+    });
+  }
+
   return {
     months,
     currency,
@@ -288,7 +349,7 @@ export function analyseSpend(
     runRate,
     subscriptions,
     nextRenewal,
-    byVendor: rank(inWindow, (bill) => bill.billing?.vendor ?? bill.entity),
+    byVendor: rank(inWindow, (bill) => bill.billing?.vendor ?? bill.entity, elsewhere),
     byProject: rank(inWindow, (bill) => bill.project),
     cumulative,
   };
