@@ -1,0 +1,387 @@
+@import 'tailwindcss';
+
+/*
+ * Garage Vault design tokens.
+ *
+ * Two themes, one token vocabulary. Every surface, line and ink in the app
+ * refers to a semantic name, never a literal colour, so switching the theme is
+ * a matter of swapping the raw values below and nothing else re-renders.
+ *
+ * The elevation model is the part worth understanding, because it is what
+ * stops the light theme from looking like a washed-out negative of the dark
+ * one. "raised" always means *closer to the viewer*, so:
+ *
+ *   dark   bg #08090b  ->  raised #14171b   (elevation gets LIGHTER)
+ *   light  bg #f1f1ef  ->  raised #ffffff   (elevation gets LIGHTER too)
+ *
+ * The canvas moves, not the direction. A panel is white on a grey desk in the
+ * day and charcoal against black at night, and in both cases it reads as the
+ * thing on top. Naively inverting the ramp is what makes most ported light
+ * themes feel muddy.
+ *
+ * Colour still carries meaning and never decoration: the accent marks the
+ * active thing, and the three-step scale marks password health.
+ */
+
+/* ------------------------------------------------------------- dark ---- */
+/* The original brand: deep warm-black with a single orange. */
+:root[data-theme='dark'] {
+  --bg: #08090b;
+  --panel: #0e1013;
+  --raised: #14171b;
+  --hover: #191d22;
+  --line: #1f242a;
+  --line-strong: #2c333b;
+
+  --ink: #eceef1;
+  --ink-2: #9aa2ac;
+  --ink-3: #656d77;
+
+  --accent: #ff7a2f;
+  --accent-ink: #180b03;
+
+  --strong: #3ecf8e;
+  --fair: #f5a524;
+  --weak: #f6605a;
+
+  /* Surface effects. Dark surfaces are lit from above and cast hard shadows. */
+  --sheen-shadow: inset 0 1px 0 rgb(255 255 255 / 0.045);
+  --lift-shadow:
+    0 24px 70px -24px rgb(0 0 0 / 0.85),
+    inset 0 1px 0 rgb(255 255 255 / 0.05);
+  --shadow-dialog: 0 30px 80px -20px rgb(0 0 0 / 0.9);
+  --shadow-toast: 0 10px 40px -12px rgb(0 0 0 / 0.9);
+  --shadow-row: none;
+
+  --scrollbar-hover: #3b434d;
+
+  /*
+   * Chart marks get their own step rather than reusing the UI accent. On a
+   * dark ground a mark at the accent's lightness blooms, so this is deepened
+   * until it sits inside the band for dark surfaces while still clearing 3:1
+   * against them. Verified, not guessed.
+   */
+  --chart-1: #e06322;
+
+  /* Film grain reads as light dust on a dark surface. */
+  --grain-opacity: 0.028;
+  --grain-blend: normal;
+
+  /* Strength of the warm wash behind full-page moments. */
+  --ambient-1: 14%;
+  --ambient-2: 7%;
+
+  /* The wordmark is a dark lockup, so it inverts to white here. */
+  --logo-filter: brightness(0) invert(1);
+
+  color-scheme: dark;
+}
+
+/* ------------------------------------------------------------ light ---- */
+/*
+ * The default, and the bare `:root` fallback for any document that renders
+ * before the theme attribute is set, which is what the root error boundary
+ * does when it replaces <html> wholesale.
+ *
+ * Warm neutral rather than blue-grey, because the accent is orange and a cool
+ * canvas would fight it. Every ink value below clears WCAG AA (4.5:1) against
+ * the panel it sits on, which is why the accent and the health colours are
+ * deepened here: #ff7a2f on white is 2.4:1 and unreadable as text, #d2500f is
+ * 4.6:1 and still unmistakably the same orange.
+ */
+:root,
+:root[data-theme='light'] {
+  --bg: #f1f1ef;
+  --panel: #fafaf9;
+  --raised: #ffffff;
+  --hover: #e9e9e5;
+  --line: #e6e6e2;
+  --line-strong: #d2d2cc;
+
+  --ink: #17181c;
+  --ink-2: #4a4b52;
+  --ink-3: #6b6c74;
+
+  --accent: #d2500f;
+  --accent-ink: #fffaf6;
+
+  --strong: #0e8a56;
+  --fair: #a4620a;
+  --weak: #c92f2c;
+
+  /*
+   * Light surfaces are separated by shadow, not by a lit edge, so the sheen
+   * becomes a soft drop instead of a highlight. Shadows are tinted with the
+   * ink hue rather than pure black, which is what keeps them from looking
+   * like dirt on the page.
+   */
+  --sheen-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.9),
+    0 1px 2px rgb(23 24 28 / 0.04);
+  --lift-shadow:
+    0 24px 60px -28px rgb(23 24 28 / 0.22),
+    0 2px 6px rgb(23 24 28 / 0.04);
+  --shadow-dialog:
+    0 30px 70px -22px rgb(23 24 28 / 0.24),
+    0 2px 8px rgb(23 24 28 / 0.06);
+  --shadow-toast: 0 10px 34px -12px rgb(23 24 28 / 0.28);
+  --shadow-row: 0 1px 2px rgb(23 24 28 / 0.05);
+
+  --scrollbar-hover: #b6b6ae;
+
+  /* On paper the accent itself is already in band and clears contrast. */
+  --chart-1: #d2500f;
+
+  /* Multiply, so the grain darkens the paper instead of fogging it. */
+  --grain-opacity: 0.022;
+  --grain-blend: multiply;
+
+  --ambient-1: 9%;
+  --ambient-2: 5%;
+
+  /* On paper the lockup stays black: knock it to solid, do not invert. */
+  --logo-filter: brightness(0);
+
+  color-scheme: light;
+}
+
+/*
+ * `inline` is load-bearing. Without it Tailwind copies the *value* of each
+ * token into the generated utilities at build time, and the runtime swap
+ * above would do nothing. With it, `.bg-panel` compiles to
+ * `background-color: var(--panel)` and follows the theme.
+ */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-raised: var(--raised);
+  --color-hover: var(--hover);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+
+  --color-strong: var(--strong);
+  --color-fair: var(--fair);
+  --color-weak: var(--weak);
+}
+
+@theme {
+  --font-sans: var(--font-geist-sans), 'Segoe UI', system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), 'Cascadia Code', Consolas, ui-monospace, monospace;
+
+  /* One radius system: surfaces 12px, controls 8px, pills full. */
+  --radius-surface: 12px;
+  --radius-control: 8px;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    background: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overscroll-behavior: none;
+  }
+
+  /*
+   * Antialiasing is a dark-mode fix: it thins the strokes that bloom when
+   * light text sits on a dark ground. Do it on paper and the type goes
+   * spindly, so light theme keeps the platform default.
+   */
+  :root[data-theme='light'] body {
+    -webkit-font-smoothing: auto;
+  }
+
+  /* One consistent focus treatment across buttons, inputs and list rows. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  ::selection {
+    background: var(--color-accent);
+    color: var(--color-accent-ink);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-line-strong);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-hover);
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer utilities {
+  /* Secrets and other fixed-width values. */
+  .font-secret {
+    font-family: var(--font-mono);
+    font-variant-ligatures: none;
+    letter-spacing: 0.01em;
+  }
+
+  /* Section labels in the sidebar and detail pane. */
+  .label-caps {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--color-ink-3);
+  }
+
+  .panel {
+    background: var(--color-panel);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-surface);
+  }
+
+  /*
+   * Film grain. Fixed and non-interactive so it never repaints on scroll,
+   * which is what makes grain overlays expensive on mobile.
+   */
+  .grain::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    pointer-events: none;
+    opacity: var(--grain-opacity);
+    mix-blend-mode: var(--grain-blend);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* Warm ambient wash behind full-page moments. */
+  .ambient {
+    background:
+      radial-gradient(ellipse 78% 52% at 12% 6%, color-mix(in oklab, var(--color-accent) var(--ambient-1), transparent), transparent 68%),
+      radial-gradient(ellipse 58% 48% at 88% 94%, color-mix(in oklab, var(--color-accent) var(--ambient-2), transparent), transparent 70%);
+  }
+
+  /* Hairline grid, giving the void some sense of scale. */
+  .hairgrid {
+    background-image:
+      linear-gradient(to right, var(--color-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--color-line) 1px, transparent 1px);
+    background-size: 64px 64px;
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, #000 20%, transparent 78%);
+  }
+
+  /* A lit top edge on dark, a soft drop on light. Either way: a real surface. */
+  .sheen {
+    box-shadow: var(--sheen-shadow);
+  }
+
+  .lift {
+    box-shadow: var(--lift-shadow);
+  }
+
+  /* The logo lockup, knocked to whichever end of the ramp the theme needs. */
+  .logo-adaptive {
+    filter: var(--logo-filter);
+  }
+
+  /* Applied to the whole shell when the window loses focus, so a screen-share
+     or a passer-by never catches a revealed secret. */
+  .privacy-blur {
+    filter: blur(8px);
+    transition: filter 130ms ease-out;
+  }
+
+  /* Masks a long value at its trailing edge instead of cutting it dead. */
+  .fade-r {
+    mask-image: linear-gradient(to right, #000 82%, transparent 100%);
+  }
+}
+
+/*
+ * Theme switch. Cross-fading every surface at once is the difference between
+ * "the page changed" and "someone turned the lights on", but a permanent
+ * global transition would also smear every hover and selection change. So the
+ * toggle adds this class for the length of the fade and takes it off again.
+ */
+:root.theme-anim,
+:root.theme-anim *,
+:root.theme-anim *::before,
+:root.theme-anim *::after {
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease !important;
+}
+
+/*
+ * Print. The app is a fixed-height shell, none of which should reach paper:
+ * only the label sheet does. Backgrounds are forced on so the barcodes
+ * survive browsers that strip them by default.
+ */
+@media print {
+  @page {
+    margin: 6mm;
+  }
+
+  html,
+  body {
+    height: auto;
+    background: #fff;
+    color: #000;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .print-sheet,
+  .print-sheet * {
+    visibility: visible;
+  }
+
+  .print-sheet {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    padding: 0 !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

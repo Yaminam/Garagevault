@@ -1,0 +1,47 @@
+node_modules/
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# ---- Secrets and data. None of this may ever be committed. ----------------
+# Environment: holds the service_role key and access tokens.
+.env.local
+.env*.local
+
+# Source spreadsheets and the scripts that built them. Plaintext credentials.
+*.xlsx
+~$*.xlsx
+_update.ps1
+
+# All excel, spreadsheets, employee lists, and scratch generators live here,
+# separated from the code. Holds plaintext data, so never commit it.
+data/
+excel make/
+
+# The master password and any other access notes. NEVER commit this: it is the
+# single key that decrypts the whole vault.
+VAULT-ACCESS.local.md
+*.local.md
+
+# Real employee and credential data used to seed the vault. PII, keep it local.
+employees.csv
+*.people.csv
+invoices/
+invocies/
+
+# Supabase CLI scratch state.
+supabase/.temp/
+
+# ---- Regenerated assets ---------------------------------------------------
+# The OCR core, worker, and PDF worker are copied out of node_modules by the
+# postinstall hook (npm run sync:workers), so they do not need committing.
+# The language data is the exception: it is a one-off download, not an npm
+# artefact, so it stays in the repo.
+public/ocr/*.wasm
+public/ocr/*.wasm.js
+public/ocr/worker.min.js
+public/pdf/pdf.worker.min.mjs
+
+.vercel
+.env*

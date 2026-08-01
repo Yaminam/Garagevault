@@ -1,0 +1,45 @@
+{
+  "name": "garage-vault",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Zero-knowledge credential vault for the Garage AI master tracker.",
+  "scripts": {
+    "postinstall": "node tools/sync-workers.ts",
+    "sync:workers": "node tools/sync-workers.ts",
+    "seed": "node --env-file=.env.local tools/seed.ts",
+    "seed:invoices": "node --env-file=.env.local tools/seed-invoices.ts",
+    "import:env": "node --env-file=.env.local tools/import-env.ts",
+    "attach:invoices": "node --env-file=.env.local tools/attach-invoices.ts",
+    "rekey": "node --env-file=.env.local tools/rekey.ts",
+    "db:link": "supabase link --project-ref zfnboryfecpyfwmprfyj",
+    "db:push": "supabase db push",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
+    "@supabase/supabase-js": "^2.110.8",
+    "geist": "^1.7.2",
+    "motion": "^12.42.2",
+    "next": "^15.5.4",
+    "pdfjs-dist": "^6.1.200",
+    "qrcode-generator": "^2.0.4",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "simple-icons": "^16.27.1",
+    "tesseract.js": "^7.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.13",
+    "@types/node": "^24.5.2",
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
+    "supabase": "^2.109.1",
+    "tailwindcss": "^4.1.13",
+    "typescript": "^5.9.2"
+  }
+}
