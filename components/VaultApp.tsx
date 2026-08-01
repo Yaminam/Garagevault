@@ -15,9 +15,12 @@ import {
   PBKDF2_ITERATIONS,
   checkVerifier,
   deriveKey,
+  deriveKeyBits,
+  importAesKey,
   makeVerifier,
   randomSalt,
 } from '@/lib/crypto.ts';
+import { unlockWithAccount } from '@/lib/users.ts';
 import { auditVault } from '@/lib/audit.ts';
 import {
   SchemaMissingError,
@@ -181,16 +184,45 @@ function VaultAppInner() {
 
         if (phase.kind !== 'locked') return;
 
-        const key = await deriveKey(password, phase.meta.kdfSalt, phase.meta.kdfIterations);
-        const ok = await checkVerifier(key, {
-          iv: phase.meta.verifierIv,
-          ciphertext: phase.meta.verifierCt,
-        });
-        if (!ok) {
+        /*
+         * One derivation serves both routes. The salt and iteration count are
+         * shared, so these bytes are at once a candidate vault key, which the
+         * verifier settles, and a candidate unwrapping key for the account
+         * records. Deriving per account would mean a PBKDF2 run each and an
+         * unlock that gets slower every time somebody is added.
+         */
+        const bits = await deriveKeyBits(
+          password,
+          phase.meta.kdfSalt,
+          phase.meta.kdfIterations,
+        );
+        const candidate = await importAesKey(bits);
+
+        if (
+          await checkVerifier(candidate, {
+            iv: phase.meta.verifierIv,
+            ciphertext: phase.meta.verifierCt,
+          })
+        ) {
+          // The original master password. It belongs to no one in particular,
+          // so the identity prompt still decides who is using this browser.
+          await hydrate(phase.meta, candidate);
+          return;
+        }
+
+        const account = await unlockWithAccount(client(), candidate, phase.meta);
+        if (!account) {
           setUnlockError('That password did not unlock the vault.');
           return;
         }
-        await hydrate(phase.meta, key);
+
+        // A password that knows who it belongs to answers the identity
+        // question by being used, so the prompt is skipped.
+        if (account.identity) {
+          saveIdentity(account.identity);
+          setIdentity(account.identity);
+        }
+        await hydrate(phase.meta, account.key);
       } catch (error) {
         setUnlockError(error instanceof Error ? error.message : 'Could not open the vault.');
       } finally {

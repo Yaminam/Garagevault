@@ -11,6 +11,7 @@
     "seed:invoices": "node --env-file=.env.local tools/seed-invoices.ts",
     "import:env": "node --env-file=.env.local tools/import-env.ts",
     "attach:invoices": "node --env-file=.env.local tools/attach-invoices.ts",
+    "add:password": "node --env-file=.env.local tools/add-password.ts",
     "rekey": "node --env-file=.env.local tools/rekey.ts",
     "db:link": "supabase link --project-ref zfnboryfecpyfwmprfyj",
     "db:push": "supabase db push",
