@@ -15,6 +15,7 @@ import {
   WarningCircle,
 } from '@phosphor-icons/react/dist/ssr';
 import { excludeOutliers } from '@/lib/spend.ts';
+import { ASSET_CATEGORY_LABEL } from '@/lib/assets.ts';
 import type { Identity } from '@/lib/identity.ts';
 import { BILLING_CYCLE_LABEL, type VaultItem } from '@/lib/types.ts';
 import { useVault } from './vault-context.tsx';
@@ -58,6 +59,34 @@ function sumByCurrency(bills: VaultItem[], predicate: (i: VaultItem) => boolean)
 }
 
 const money = (ccy: string, n: number) => `${ccy} ${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+
+/**
+ * A plain-English line for "recently updated", instead of a title next to a
+ * bare kind label. What actually happened (assigned to whom, added to the
+ * list) is the useful part; the raw record title on its own does not say it.
+ */
+function describeUpdate(item: VaultItem): string {
+  switch (item.kind) {
+    case 'asset': {
+      const category = item.asset?.category
+        ? (ASSET_CATEGORY_LABEL[item.asset.category] ?? item.asset.category)
+        : 'Asset';
+      return item.owner?.name
+        ? `${category} assigned to ${item.owner.name}`
+        : `${category} added, not yet assigned`;
+    }
+    case 'person':
+      return `${item.person?.fullName ?? item.title} added to the employee list`;
+    case 'billing':
+      return `${item.billing?.vendor ?? item.title} bill updated`;
+    case 'env':
+      return `${item.title} environment file updated`;
+    case 'org':
+      return `${item.title} company details updated`;
+    default:
+      return `${item.title} login updated`;
+  }
+}
 
 export function DashboardPanel({ identity, onFilter, onView, onOpen }: Props) {
   const { items, audit } = useVault();
@@ -303,8 +332,9 @@ export function DashboardPanel({ identity, onFilter, onView, onOpen }: Props) {
                   className="flex w-full items-center gap-3 rounded-[6px] px-2 py-1.5 text-left transition hover:bg-hover"
                 >
                   <Monogram label={item.title} size="sm" />
-                  <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink">{item.title}</span>
-                  <span className="shrink-0 text-[11px] text-ink-3">{item.kind}</span>
+                  <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink">
+                    {describeUpdate(item)}
+                  </span>
                   <CaretRight size={12} weight="bold" className="shrink-0 text-ink-3" />
                 </button>
               ))}
