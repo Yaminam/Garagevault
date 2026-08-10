@@ -1661,33 +1661,42 @@ function OwnerPicker({
   const [manual, setManual] = useState(true);
 
   if (roster.length > 0 && !manual) {
+    // A native <select> stays collapsed until clicked, which reads as an
+    // empty control rather than "the employee list." This lays every name
+    // out as its own row instead, so the list is what's actually on screen.
+    const row = (active: boolean, extra = '') =>
+      `flex w-full items-center px-3 py-2 text-left text-[13px] transition border-b border-line last:border-b-0 ${
+        active ? 'bg-accent/10 text-accent' : 'text-ink-2 hover:bg-hover'
+      } ${extra}`;
+
     const person = (
       <Field label="Person" hint="From the employee list, so allocations stay linked">
-        <select
-          value={matched?.id ?? ''}
-          onChange={(e) => {
-            if (e.target.value === '__manual') {
+        <div className="max-h-[220px] overflow-y-auto rounded-[8px] border border-line">
+          <button type="button" aria-pressed={!matched} onClick={() => onChange(clear)} className={row(!matched)}>
+            Nobody yet
+          </button>
+          {roster.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              aria-pressed={matched?.id === r.id}
+              onClick={() => onChange({ name: r.name, email: r.email, department: r.department })}
+              className={row(matched?.id === r.id)}
+            >
+              {r.name}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => {
               onChange(clear);
               setManual(true);
-              return;
-            }
-            const picked = roster.find((r) => r.id === e.target.value);
-            onChange(
-              picked
-                ? { name: picked.name, email: picked.email, department: picked.department }
-                : clear,
-            );
-          }}
-          className={inputClass}
-        >
-          <option value="">Nobody yet</option>
-          {roster.map((r) => (
-            <option key={r.id} value={r.id}>
-              {r.name}
-            </option>
-          ))}
-          <option value="__manual">Someone not on the list…</option>
-        </select>
+            }}
+            className={row(false, 'text-ink-3')}
+          >
+            Someone not on the list…
+          </button>
+        </div>
       </Field>
     );
 
