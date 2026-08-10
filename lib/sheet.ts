@@ -190,7 +190,7 @@ export function buildItems(sheets: Sheet[]): ItemFields[] {
       // Account types are written as "Copyloop (Project)" in the sheet.
       project: /^(.*?)\s*\(project\)$/i.exec(accountType ?? '')?.[1]?.trim() ?? null,
       // The sheet records no owner name, so the login address is the best signal.
-      owner: { name: null, email },
+      owner: { name: null, email, department: null },
       entity: at('entity') ?? 'Unassigned',
       notes,
       username,

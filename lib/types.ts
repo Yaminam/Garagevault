@@ -37,6 +37,8 @@ export type EnvVar = {
 export type Owner = {
   name: string | null;
   email: string | null;
+  /** Asset custody cares who has it organisationally, not their inbox. */
+  department: string | null;
 };
 
 export type ItemKind = 'login' | 'env' | 'billing' | 'asset' | 'org' | 'person';
@@ -131,13 +133,12 @@ export type ItemFields = {
     received: boolean;
     receivedOn: string | null;
     scannedAt: string | null;
-    /** Only meaningful for a computer. Null entirely for a monitor or a UPS. */
-    specs: {
-      cpu: string | null;
-      ram: string | null;
-      storage: string | null;
-      gpu: string | null;
-    } | null;
+    /**
+     * Free-text values keyed by field id, which fields exist depends on
+     * `category` — see `specFieldsFor` in lib/assets.ts. Empty for a category
+     * with nothing to spec, such as a mouse.
+     */
+    specs: Record<string, string> | null;
   } | null;
 
   // --- org -----------------------------------------------------------------
@@ -197,7 +198,7 @@ export type VaultItem = ItemFields & {
 const BASE: Omit<ItemFields, 'kind' | 'section'> = {
   title: '',
   project: null,
-  owner: { name: null, email: null },
+  owner: { name: null, email: null, department: null },
   entity: 'Garage Collective',
   notes: null,
   username: null,

@@ -131,7 +131,11 @@ export function buildPeople(sheets: Sheet[], defaultEntity: string): PeopleImpor
         ...blank,
         title: fullName,
         entity: at('entity') ?? defaultEntity,
-        owner: { name: fullName, email: isEmail(workEmail) ? workEmail : null },
+        owner: {
+          name: fullName,
+          email: isEmail(workEmail) ? workEmail : null,
+          department: at('department'),
+        },
         person: {
           ...blank.person!,
           fullName,

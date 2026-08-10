@@ -25,7 +25,7 @@ import {
 } from '@phosphor-icons/react/dist/ssr';
 import { VERDICT_LABEL, scorePassword } from '@/lib/audit.ts';
 import { toEnvBlock } from '@/lib/env-templates.ts';
-import { ASSET_CATEGORY_LABEL, withGb } from '@/lib/assets.ts';
+import { ASSET_CATEGORY_LABEL, specFieldsFor, withGb } from '@/lib/assets.ts';
 import { assetQrUrl, currentOrigin } from '@/lib/qr.ts';
 import { checkGstin } from '@/lib/org.ts';
 import {
@@ -874,10 +874,12 @@ function AssetPanel({ item }: { item: VaultItem }) {
         {asset.category && (
           <TextRow label="Category" value={ASSET_CATEGORY_LABEL[asset.category] ?? asset.category} />
         )}
-        {asset.specs?.cpu && <TextRow label="CPU" value={asset.specs.cpu} />}
-        {asset.specs?.ram && <TextRow label="RAM" value={withGb(asset.specs.ram)!} />}
-        {asset.specs?.storage && <TextRow label="Storage" value={withGb(asset.specs.storage)!} />}
-        {asset.specs?.gpu && <TextRow label="GPU" value={asset.specs.gpu} />}
+        {specFieldsFor(asset.category).map((field) => {
+          const value = asset.specs?.[field.key];
+          if (!value) return null;
+          const shown = field.key === 'ram' || field.key === 'storage' ? withGb(value)! : value;
+          return <TextRow key={field.key} label={field.label} value={shown} />;
+        })}
         {asset.location && <TextRow label="Location" value={asset.location} />}
         {asset.purchasedOn && <TextRow label="Purchased" value={asset.purchasedOn} />}
         {(asset.warrantyStart || asset.warrantyUntil) && (

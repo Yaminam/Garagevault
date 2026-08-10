@@ -33,9 +33,50 @@ const CATEGORY_CODE: Record<string, string> = Object.fromEntries(
 /** Ids for the picker, in the curated order above. */
 export const ASSET_CATEGORIES = CATEGORIES.map((c) => c.id);
 
-/** Categories a CPU/RAM/storage spec sheet actually applies to. */
-export const SPECABLE_CATEGORIES = new Set(['laptop', 'desktop']);
-export const isSpecable = (category: string | null) => SPECABLE_CATEGORIES.has(category ?? '');
+/** One line of the spec sheet: a free-text value under a category-specific label. */
+export type SpecField = { key: string; label: string; placeholder?: string };
+
+const COMPUTER_SPECS: SpecField[] = [
+  { key: 'cpu', label: 'CPU', placeholder: 'Apple M2 Pro' },
+  { key: 'ram', label: 'RAM', placeholder: '16 GB' },
+  { key: 'storage', label: 'Storage', placeholder: '512 GB SSD' },
+  { key: 'gpu', label: 'GPU', placeholder: 'Integrated' },
+];
+
+/**
+ * What the Specs section asks for, per category. A monitor has no CPU and a
+ * mouse has nothing here at all, so this is keyed by category rather than
+ * being one fixed CPU/RAM/storage/GPU sheet applied everywhere.
+ */
+const SPEC_FIELDS: Record<string, SpecField[]> = {
+  laptop: COMPUTER_SPECS,
+  desktop: COMPUTER_SPECS,
+  tablet: [
+    { key: 'storage', label: 'Storage', placeholder: '128 GB' },
+    { key: 'connectivity', label: 'Connectivity', placeholder: 'Wi-Fi + cellular' },
+  ],
+  phone: [
+    { key: 'storage', label: 'Storage', placeholder: '128 GB' },
+    { key: 'imei', label: 'IMEI' },
+  ],
+  monitor: [
+    { key: 'size', label: 'Screen size', placeholder: '27"' },
+    { key: 'resolution', label: 'Resolution', placeholder: '2560 x 1440' },
+  ],
+  printer: [{ key: 'consumable', label: 'Ink / toner', placeholder: 'HP 678 cartridge' }],
+  headphones: [{ key: 'connectivity', label: 'Connectivity', placeholder: 'Bluetooth' }],
+  ups: [
+    { key: 'capacity', label: 'Capacity', placeholder: '1500 VA' },
+    { key: 'backup', label: 'Backup time', placeholder: '20 min at half load' },
+  ],
+  charger: [
+    { key: 'wattage', label: 'Wattage', placeholder: '65 W' },
+    { key: 'connector', label: 'Connector', placeholder: 'USB-C' },
+  ],
+};
+
+export const specFieldsFor = (category: string | null): SpecField[] =>
+  SPEC_FIELDS[category ?? ''] ?? [];
 
 /**
  * RAM and storage are entered as free text so "16 GB" and "1 TB SSD" both fit,

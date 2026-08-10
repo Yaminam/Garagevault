@@ -21,7 +21,7 @@ import { scorePassword, VERDICT_LABEL } from '@/lib/audit.ts';
 import { ENV_TEMPLATES, looksSecret, parseEnvBlock, templateById } from '@/lib/env-templates.ts';
 import type { Identity } from '@/lib/identity.ts';
 import { rememberProject } from '@/lib/projects.ts';
-import { ASSET_CATEGORIES, ASSET_CATEGORY_LABEL, isSpecable, nextAssetTag } from '@/lib/assets.ts';
+import { ASSET_CATEGORIES, ASSET_CATEGORY_LABEL, nextAssetTag, specFieldsFor } from '@/lib/assets.ts';
 import { applyInvoice, filledLabels } from '@/lib/billing.ts';
 import {
   DEPARTMENTS,
@@ -48,9 +48,10 @@ import {
   type EnvVar,
   type ItemFields,
   type ItemKind,
+  type Owner,
   type VaultItem,
 } from '@/lib/types.ts';
-import { assetQrPayload } from '@/lib/qr.ts';
+import { assetQrPayload, assetQrUrl, currentOrigin } from '@/lib/qr.ts';
 import { useVault } from './vault-context.tsx';
 import { AssetLabel, QrCode } from './BarcodeLabel.tsx';
 import { StrengthMeter } from './primitives.tsx';
@@ -147,7 +148,9 @@ export function ItemEditor({
     );
     // Defaulting the owner is the whole point of asking who is at the keyboard:
     // an entry with nobody against it is one nobody rotates.
-    return identity ? { ...blank, owner: { name: identity.name, email: identity.email } } : blank;
+    return identity
+      ? { ...blank, owner: { name: identity.name, email: identity.email, department: null } }
+      : blank;
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -167,6 +170,20 @@ export function ItemEditor({
 
   const set = <K extends keyof ItemFields>(key: K, value: ItemFields[K]) =>
     setFields((current) => ({ ...current, [key]: value }));
+
+  // An asset has no separate name field, so its title tracks make + model
+  // directly, falling back to the category while both are still blank.
+  const assetMake = fields.asset?.make;
+  const assetModel = fields.asset?.model;
+  const assetCategory = fields.asset?.category;
+  useEffect(() => {
+    if (fields.kind !== 'asset') return;
+    const computed =
+      [assetMake, assetModel].filter(Boolean).join(' ').trim() ||
+      ASSET_CATEGORY_LABEL[assetCategory ?? ''] ||
+      'Untitled asset';
+    setFields((current) => (current.title === computed ? current : { ...current, title: computed }));
+  }, [fields.kind, assetMake, assetModel, assetCategory]);
 
   // Existing values feed the autocomplete lists so spellings stay consistent.
   const entities = useMemo(() => [...new Set(items.map((i) => i.entity))].sort(), [items]);
@@ -296,22 +313,22 @@ export function ItemEditor({
             </div>
           )}
 
-          <Group title="Basics">
-            <Field label="Name" required>
-              <input
-                ref={firstField}
-                value={fields.title}
-                onChange={(e) => set('title', e.target.value)}
-                placeholder={PLACEHOLDER_TITLE[fields.kind]}
-                className={inputClass}
-              />
-            </Field>
+          {/* An asset has no Basics section at all: its name is just make +
+              model, already typed into Hardware below, and it belongs to the
+              one org that owns the vault, so there is nothing left to ask
+              here. Every other kind still needs both. */}
+          {fields.kind !== 'asset' && (
+            <Group title="Basics">
+              <Field label="Name" required>
+                <input
+                  ref={firstField}
+                  value={fields.title}
+                  onChange={(e) => set('title', e.target.value)}
+                  placeholder={PLACEHOLDER_TITLE[fields.kind]}
+                  className={inputClass}
+                />
+              </Field>
 
-            {/* Every asset already belongs to the one org that owns the vault,
-                so asking per-device is a field nobody changes — it just adds a
-                click. Other kinds keep it, since a login or a bill can
-                genuinely sit under a different entity. */}
-            {fields.kind !== 'asset' && (
               <div className={SHOWS_PROJECT[fields.kind] ? 'grid gap-4 sm:grid-cols-2' : ''}>
                 {SHOWS_PROJECT[fields.kind] && (
                   <Field
@@ -345,8 +362,8 @@ export function ItemEditor({
                   </datalist>
                 </Field>
               </div>
-            )}
-          </Group>
+            </Group>
+          )}
 
           {/* Both halves matter: something with no named owner is something
               nobody rotates, returns, or cancels. */}
@@ -355,6 +372,7 @@ export function ItemEditor({
             hint={OWNER_GROUP[fields.kind].hint}
           >
             <OwnerPicker
+              kind={fields.kind}
               value={fields.owner}
               people={people}
               emailValid={emailValid}
@@ -866,7 +884,7 @@ function AssetFields({
   const asset = fields.asset ?? emptyAsset('GC-AS-0001').asset!;
   const patch = (next: Partial<NonNullable<ItemFields['asset']>>) =>
     set('asset', { ...asset, ...next });
-  const emptySpecs = () => ({ cpu: null, ram: null, storage: null, gpu: null });
+  const specFields = specFieldsFor(asset.category);
 
   return (
     <>
@@ -943,53 +961,26 @@ function AssetFields({
         </Field>
       </Group>
 
-      {/* Only a laptop or a desktop has a chip, memory and a drive to speak
-          of — a monitor or a UPS has nothing here worth asking for. */}
-      {isSpecable(asset.category) && (
+      {/* Which fields make sense here follows from the category: a monitor
+          has a screen size, a mouse has nothing worth asking for at all. */}
+      {specFields.length > 0 && (
         <Group title="Specs" hint="What is actually inside it">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="CPU">
-              <input
-                value={asset.specs?.cpu ?? ''}
-                onChange={(e) =>
-                  patch({ specs: { ...(asset.specs ?? emptySpecs()), cpu: e.target.value || null } })
-                }
-                placeholder="Apple M2 Pro"
-                className={inputClass}
-              />
-            </Field>
-            <Field label="RAM">
-              <input
-                value={asset.specs?.ram ?? ''}
-                onChange={(e) =>
-                  patch({ specs: { ...(asset.specs ?? emptySpecs()), ram: e.target.value || null } })
-                }
-                placeholder="16 GB"
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Storage">
-              <input
-                value={asset.specs?.storage ?? ''}
-                onChange={(e) =>
-                  patch({
-                    specs: { ...(asset.specs ?? emptySpecs()), storage: e.target.value || null },
-                  })
-                }
-                placeholder="512 GB SSD"
-                className={inputClass}
-              />
-            </Field>
-            <Field label="GPU">
-              <input
-                value={asset.specs?.gpu ?? ''}
-                onChange={(e) =>
-                  patch({ specs: { ...(asset.specs ?? emptySpecs()), gpu: e.target.value || null } })
-                }
-                placeholder="Integrated"
-                className={inputClass}
-              />
-            </Field>
+            {specFields.map((field) => (
+              <Field key={field.key} label={field.label}>
+                <input
+                  value={asset.specs?.[field.key] ?? ''}
+                  onChange={(e) => {
+                    const next = { ...(asset.specs ?? {}) };
+                    if (e.target.value) next[field.key] = e.target.value;
+                    else delete next[field.key];
+                    patch({ specs: Object.keys(next).length > 0 ? next : null });
+                  }}
+                  placeholder={field.placeholder}
+                  className={inputClass}
+                />
+              </Field>
+            ))}
           </div>
         </Group>
       )}
@@ -1076,6 +1067,7 @@ function AssetQrPreview({ fields }: { fields: ItemFields }) {
     [fields],
   );
   const payload = useMemo(() => assetQrPayload(item), [item]);
+  const qrValue = useMemo(() => assetQrUrl(item, currentOrigin()), [item]);
 
   const lineCount = payload.split('\n').length - 1;
   // Below this the label is mostly blank and worth filling in first.
@@ -1086,7 +1078,7 @@ function AssetQrPreview({ fields }: { fields: ItemFields }) {
       <div className="flex flex-col gap-4 rounded-[8px] border border-line bg-bg/50 p-3.5 sm:flex-row sm:items-start">
         {/* White in both themes, so the code stays scannable. */}
         <div className="shrink-0 rounded-[6px] border border-line bg-white p-2">
-          <QrCode value={payload} className="h-[112px] w-[112px]" />
+          <QrCode value={qrValue} className="h-[112px] w-[112px]" />
         </div>
 
         <div className="min-w-0 flex-1">
@@ -1094,9 +1086,9 @@ function AssetQrPreview({ fields }: { fields: ItemFields }) {
             Carries {lineCount} {lineCount === 1 ? 'field' : 'fields'} from this form.
           </p>
           <p className="mt-1 text-[11.5px] leading-relaxed text-ink-3">
-            Any phone camera reads it as plain text, so the details survive even for someone with
-            no access to the vault. Nothing secret is included: a label rides on the outside of a
-            device that leaves the building.
+            Scanning it opens a page with the fields below — no app, no vault access needed.
+            Nothing secret is included: a label rides on the outside of a device that leaves the
+            building.
           </p>
 
           <button
@@ -1127,7 +1119,7 @@ function AssetQrPreview({ fields }: { fields: ItemFields }) {
             title: fields.title.trim(),
             serial: fields.asset?.serial ?? null,
             assignee: fields.owner?.name ?? null,
-            qr: payload,
+            qr: qrValue,
           }}
           onClose={() => setPrinting(false)}
         />
@@ -1150,7 +1142,7 @@ function SingleLabelPrint({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-bg/95 backdrop-blur-sm print:static print:bg-white">
+    <div className="fixed inset-0 z-[60] flex flex-col bg-bg/95 backdrop-blur-sm print:bg-white">
       <div className="flex items-center gap-3 border-b border-line px-4 py-3 print:hidden">
         <p className="flex-1 text-[13px] font-medium text-ink">Label preview</p>
         <button
@@ -1392,7 +1384,11 @@ function PersonFields({
               value={person.workEmail ?? ''}
               onChange={(e) => {
                 patch({ workEmail: e.target.value || null });
-                set('owner', { name: person.fullName, email: e.target.value || null });
+                set('owner', {
+                  name: person.fullName,
+                  email: e.target.value || null,
+                  department: person.department,
+                });
               }}
               placeholder="name@garageaistack.com"
               className={inputClass}
@@ -1479,7 +1475,7 @@ function PersonFields({
             onChange={(e) => patch({ isTeamLead: e.target.checked })}
             className="h-4 w-4 shrink-0 accent-accent"
           />
-          <span className="text-[13px] text-ink">Leads a team</span>
+          <span className="text-[13px] text-ink">Leads a department</span>
         </label>
       </Group>
 
@@ -1622,16 +1618,23 @@ const inputClass =
  * who are not employees, such as an agency contact.
  */
 function OwnerPicker({
+  kind,
   value,
   people,
   emailValid,
   onChange,
 }: {
-  value: { name: string | null; email: string | null };
+  kind: ItemKind;
+  value: Owner;
   people: VaultItem[];
   emailValid: boolean;
-  onChange: (owner: { name: string | null; email: string | null }) => void;
+  onChange: (owner: Owner) => void;
 }) {
+  // An asset is signed out to a department as much as to a person — the
+  // laptop doesn't care about anyone's inbox. Every other kind keeps email,
+  // since that is what actually gets a secret rotated when someone leaves.
+  const isAsset = kind === 'asset';
+  const clear = { name: null, email: null, department: null };
   const roster = useMemo(
     () =>
       people
@@ -1652,10 +1655,10 @@ function OwnerPicker({
       : !!value.name && r.name.toLowerCase() === value.name.toLowerCase(),
   );
 
-  // Someone recorded who is not on the roster keeps the free-text form open.
-  const [manual, setManual] = useState(
-    roster.length === 0 || (!!(value.name || value.email) && !matched),
-  );
+  // Typing a name is the default, so it is always visible rather than
+  // buried inside a dropdown's last option. Switching to the roster (and
+  // back) is a click either way, in both directions.
+  const [manual, setManual] = useState(true);
 
   if (roster.length > 0 && !manual) {
     return (
@@ -1665,12 +1668,16 @@ function OwnerPicker({
             value={matched?.id ?? ''}
             onChange={(e) => {
               if (e.target.value === '__manual') {
-                onChange({ name: null, email: null });
+                onChange(clear);
                 setManual(true);
                 return;
               }
               const picked = roster.find((r) => r.id === e.target.value);
-              onChange(picked ? { name: picked.name, email: picked.email } : { name: null, email: null });
+              onChange(
+                picked
+                  ? { name: picked.name, email: picked.email, department: picked.department }
+                  : clear,
+              );
             }}
             className={inputClass}
           >
@@ -1678,21 +1685,31 @@ function OwnerPicker({
             {roster.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.name}
-                {r.department ? ` — ${r.department}` : ''}
               </option>
             ))}
             <option value="__manual">Someone not on the list…</option>
           </select>
         </Field>
 
-        {matched?.email && (
-          <p className="-mt-2 mb-4 font-mono text-[11px] text-ink-3">{matched.email}</p>
-        )}
-        {matched && !matched.email && (
-          <p className="-mt-2 mb-4 text-[11px] text-fair">
-            No work email on their record, so allocation matches on name alone.
-          </p>
-        )}
+        {/* A plain option string cannot carry a styled subtitle, so whatever
+            rides along with the name gets its own line underneath instead of
+            being glued on with a dash. */}
+        {matched &&
+          (isAsset ? (
+            matched.department && (
+              <p className="-mt-2 mb-4 text-[11px] text-ink-3">{matched.department}</p>
+            )
+          ) : (
+            <div className="-mt-2 mb-4">
+              {matched.email ? (
+                <p className="font-mono text-[11px] text-ink-3">{matched.email}</p>
+              ) : (
+                <p className="text-[11px] text-fair">
+                  No work email on their record, so allocation matches on name alone.
+                </p>
+              )}
+            </div>
+          ))}
       </>
     );
   }
@@ -1708,22 +1725,33 @@ function OwnerPicker({
             className={inputClass}
           />
         </Field>
-        <Field label="Email" error={emailValid ? null : 'Not a valid email address'}>
-          <input
-            type="email"
-            value={value.email ?? ''}
-            onChange={(e) => onChange({ ...value, email: e.target.value || null })}
-            placeholder="name@garageaistack.com"
-            className={inputClass}
-          />
-        </Field>
+        {isAsset ? (
+          <Field label="Department">
+            <input
+              value={value.department ?? ''}
+              onChange={(e) => onChange({ ...value, department: e.target.value || null })}
+              placeholder="AI"
+              className={inputClass}
+            />
+          </Field>
+        ) : (
+          <Field label="Email" error={emailValid ? null : 'Not a valid email address'}>
+            <input
+              type="email"
+              value={value.email ?? ''}
+              onChange={(e) => onChange({ ...value, email: e.target.value || null })}
+              placeholder="name@garageaistack.com"
+              className={inputClass}
+            />
+          </Field>
+        )}
       </div>
 
       {roster.length > 0 && (
         <button
           type="button"
           onClick={() => {
-            onChange({ name: null, email: null });
+            onChange(clear);
             setManual(false);
           }}
           className="-mt-2 mb-4 text-[11.5px] text-ink-3 underline decoration-line-strong underline-offset-2 hover:text-ink"
