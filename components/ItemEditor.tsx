@@ -1661,55 +1661,68 @@ function OwnerPicker({
   const [manual, setManual] = useState(true);
 
   if (roster.length > 0 && !manual) {
+    const person = (
+      <Field label="Person" hint="From the employee list, so allocations stay linked">
+        <select
+          value={matched?.id ?? ''}
+          onChange={(e) => {
+            if (e.target.value === '__manual') {
+              onChange(clear);
+              setManual(true);
+              return;
+            }
+            const picked = roster.find((r) => r.id === e.target.value);
+            onChange(
+              picked
+                ? { name: picked.name, email: picked.email, department: picked.department }
+                : clear,
+            );
+          }}
+          className={inputClass}
+        >
+          <option value="">Nobody yet</option>
+          {roster.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.name}
+            </option>
+          ))}
+          <option value="__manual">Someone not on the list…</option>
+        </select>
+      </Field>
+    );
+
+    // A plain option string cannot carry a styled subtitle, so the
+    // department reads as its own field beside the picker — the same slot
+    // it takes in the manual layout below — instead of trailing underneath.
+    if (isAsset) {
+      return (
+        <div className="grid gap-4 sm:grid-cols-2">
+          {person}
+          {matched?.department && (
+            <Field label="Department">
+              <p className={`${inputClass} flex items-center bg-bg/50 text-ink-2`}>
+                {matched.department}
+              </p>
+            </Field>
+          )}
+        </div>
+      );
+    }
+
     return (
       <>
-        <Field label="Person" hint="From the employee list, so allocations stay linked">
-          <select
-            value={matched?.id ?? ''}
-            onChange={(e) => {
-              if (e.target.value === '__manual') {
-                onChange(clear);
-                setManual(true);
-                return;
-              }
-              const picked = roster.find((r) => r.id === e.target.value);
-              onChange(
-                picked
-                  ? { name: picked.name, email: picked.email, department: picked.department }
-                  : clear,
-              );
-            }}
-            className={inputClass}
-          >
-            <option value="">Nobody yet</option>
-            {roster.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-            <option value="__manual">Someone not on the list…</option>
-          </select>
-        </Field>
-
-        {/* A plain option string cannot carry a styled subtitle, so whatever
-            rides along with the name gets its own line underneath instead of
-            being glued on with a dash. */}
-        {matched &&
-          (isAsset ? (
-            matched.department && (
-              <p className="-mt-2 mb-4 text-[11px] text-ink-3">{matched.department}</p>
-            )
-          ) : (
-            <div className="-mt-2 mb-4">
-              {matched.email ? (
-                <p className="font-mono text-[11px] text-ink-3">{matched.email}</p>
-              ) : (
-                <p className="text-[11px] text-fair">
-                  No work email on their record, so allocation matches on name alone.
-                </p>
-              )}
-            </div>
-          ))}
+        {person}
+        {matched && (
+          <div className="-mt-2 mb-4">
+            {matched.email ? (
+              <p className="font-mono text-[11px] text-ink-3">{matched.email}</p>
+            ) : (
+              <p className="text-[11px] text-fair">
+                No work email on their record, so allocation matches on name alone.
+              </p>
+            )}
+          </div>
+        )}
       </>
     );
   }
