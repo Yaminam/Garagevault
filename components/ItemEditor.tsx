@@ -23,14 +23,7 @@ import type { Identity } from '@/lib/identity.ts';
 import { rememberProject } from '@/lib/projects.ts';
 import { ASSET_CATEGORIES, ASSET_CATEGORY_LABEL, nextAssetTag, specFieldsFor } from '@/lib/assets.ts';
 import { applyInvoice, filledLabels } from '@/lib/billing.ts';
-import {
-  DEPARTMENTS,
-  EMPLOYMENT_TYPES,
-  GST_STATES,
-  checkCin,
-  checkGstin,
-  checkPan,
-} from '@/lib/org.ts';
+import { GST_STATES, checkCin, checkGstin, checkPan } from '@/lib/org.ts';
 import { scanDocument, type ScanProgress } from '@/lib/ocr.ts';
 import {
   ASSET_STATUS_LABEL,
@@ -188,6 +181,12 @@ export function ItemEditor({
   // Existing values feed the autocomplete lists so spellings stay consistent.
   const entities = useMemo(() => [...new Set(items.map((i) => i.entity))].sort(), [items]);
   const people = useMemo(() => items.filter((i) => i.kind === 'person'), [items]);
+  // The real departments in use, not a generic starter list that drifts from
+  // whatever the People page actually says.
+  const departments = useMemo(
+    () => [...new Set(people.map((p) => p.person?.department).filter((d): d is string => !!d))].sort(),
+    [people],
+  );
 
   // Assets and people both get a generated identifier, from different pools.
   const existingFor = useCallback(
@@ -224,6 +223,31 @@ export function ItemEditor({
       }
       if (item) await saveItem(item.id, cleaned);
       else await createItem(cleaned);
+
+      // A name typed by hand here is someone real, and the next asset they
+      // pick up should find them on the roster instead of being typed again.
+      if (cleaned.kind === 'asset' && cleaned.owner.name) {
+        const typedName = cleaned.owner.name.trim();
+        const alreadyListed = people.some(
+          (p) => (p.person?.fullName ?? p.title).trim().toLowerCase() === typedName.toLowerCase(),
+        );
+        if (!alreadyListed) {
+          const employeeId = nextEmployeeId(existingFor('person'));
+          const blank = emptyPerson(employeeId);
+          await createItem({
+            ...blank,
+            title: typedName,
+            owner: { name: typedName, email: null, department: cleaned.owner.department },
+            person: {
+              ...blank.person!,
+              fullName: typedName,
+              employeeId,
+              department: cleaned.owner.department,
+            },
+          });
+        }
+      }
+
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save.');
@@ -316,8 +340,10 @@ export function ItemEditor({
           {/* An asset has no Basics section at all: its name is just make +
               model, already typed into Hardware below, and it belongs to the
               one org that owns the vault, so there is nothing left to ask
-              here. Every other kind still needs both. */}
-          {fields.kind !== 'asset' && (
+              here. A person's name lives in the trimmed-down Person section
+              instead, right beside Department. Every other kind still needs
+              both. */}
+          {fields.kind !== 'asset' && fields.kind !== 'person' && (
             <Group title="Basics">
               <Field label="Name" required>
                 <input
@@ -400,7 +426,7 @@ export function ItemEditor({
           )}
           {fields.kind === 'org' && <OrgFields fields={fields} set={set} />}
           {fields.kind === 'person' && (
-            <PersonFields fields={fields} set={set} people={people} />
+            <PersonFields fields={fields} set={set} departments={departments} />
           )}
 
           <Group title="Notes">
@@ -1340,184 +1366,45 @@ function OrgFields({ fields, set }: { fields: ItemFields; set: SetField }) {
 function PersonFields({
   fields,
   set,
-  people,
+  departments,
 }: {
   fields: ItemFields;
   set: SetField;
-  people: VaultItem[];
+  departments: string[];
 }) {
   const person = fields.person ?? emptyPerson('GC-EMP-0001').person!;
   const patch = (next: Partial<NonNullable<ItemFields['person']>>) =>
     set('person', { ...person, ...next });
 
-  const leads = people.filter((p) => p.id !== fields.title && p.person?.active);
-
   return (
-    <>
-      <Group title="Identity">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Full name" required>
-            <input
-              value={person.fullName ?? ''}
-              onChange={(e) => {
-                patch({ fullName: e.target.value || null });
-                // The entry title is the person, so keep them in step.
-                set('title', e.target.value);
-              }}
-              placeholder="Shreyash Tripathi"
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Employee ID" hint="Generated, unique across the vault">
-            <input
-              value={person.employeeId ?? ''}
-              onChange={(e) => patch({ employeeId: e.target.value || null })}
-              className={`${inputClass} font-mono`}
-            />
-          </Field>
-        </div>
+    <Group title="Person">
+      <Field label="Name" required>
+        <input
+          value={person.fullName ?? ''}
+          onChange={(e) => {
+            patch({ fullName: e.target.value || null });
+            // The entry title is the person, so keep them in step.
+            set('title', e.target.value);
+          }}
+          placeholder="Shreyash Tripathi"
+          className={inputClass}
+        />
+      </Field>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Work email">
-            <input
-              type="email"
-              value={person.workEmail ?? ''}
-              onChange={(e) => {
-                patch({ workEmail: e.target.value || null });
-                set('owner', {
-                  name: person.fullName,
-                  email: e.target.value || null,
-                  department: person.department,
-                });
-              }}
-              placeholder="name@garageaistack.com"
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Personal email">
-            <input
-              type="email"
-              value={person.personalEmail ?? ''}
-              onChange={(e) => patch({ personalEmail: e.target.value || null })}
-              className={inputClass}
-            />
-          </Field>
-        </div>
-
-        <Field label="Phone">
-          <input
-            value={person.phone ?? ''}
-            onChange={(e) => patch({ phone: e.target.value || null })}
-            className={inputClass}
-          />
-        </Field>
-      </Group>
-
-      <Group title="Role">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Department">
-            <input
-              value={person.department ?? ''}
-              onChange={(e) => patch({ department: e.target.value || null })}
-              list="departments"
-              className={inputClass}
-            />
-            <datalist id="departments">
-              {DEPARTMENTS.map((d) => (
-                <option key={d} value={d} />
-              ))}
-            </datalist>
-          </Field>
-          <Field label="Designation">
-            <input
-              value={person.designation ?? ''}
-              onChange={(e) => patch({ designation: e.target.value || null })}
-              placeholder="Senior Engineer"
-              className={inputClass}
-            />
-          </Field>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Reports to" hint="Their team lead">
-            <input
-              value={person.reportsTo ?? ''}
-              onChange={(e) => patch({ reportsTo: e.target.value || null })}
-              list="team-leads"
-              placeholder="Name or work email"
-              className={inputClass}
-            />
-            <datalist id="team-leads">
-              {leads.map((p) => (
-                <option key={p.id} value={p.person?.workEmail ?? p.person?.fullName ?? ''} />
-              ))}
-            </datalist>
-          </Field>
-          <Field label="Employment type">
-            <select
-              value={person.employmentType ?? 'Full time'}
-              onChange={(e) => patch({ employmentType: e.target.value })}
-              className={inputClass}
-            >
-              {EMPLOYMENT_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </div>
-
-        <label className="mb-4 flex cursor-pointer items-center gap-3 rounded-[8px] border border-line bg-bg/50 p-3">
-          <input
-            type="checkbox"
-            checked={person.isTeamLead}
-            onChange={(e) => patch({ isTeamLead: e.target.checked })}
-            className="h-4 w-4 shrink-0 accent-accent"
-          />
-          <span className="text-[13px] text-ink">Leads a department</span>
-        </label>
-      </Group>
-
-      <Group title="Tenure">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Joined on">
-            <input
-              type="date"
-              value={person.joinedOn ?? ''}
-              onChange={(e) => patch({ joinedOn: e.target.value || null })}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Last working day" hint="Leave blank while they are still here">
-            <input
-              type="date"
-              value={person.exitedOn ?? ''}
-              onChange={(e) =>
-                patch({ exitedOn: e.target.value || null, active: !e.target.value })
-              }
-              className={inputClass}
-            />
-          </Field>
-        </div>
-
-        <Field label="Location">
-          <input
-            value={person.location ?? ''}
-            onChange={(e) => patch({ location: e.target.value || null })}
-            placeholder="Bengaluru"
-            className={inputClass}
-          />
-        </Field>
-
-        {!person.active && (
-          <p className="mb-4 rounded-[8px] border border-fair/25 bg-fair/[0.06] px-3 py-2.5 text-[12px] leading-relaxed text-ink-2">
-            Marked as left. Check <span className="text-ink">Who has what</span> for anything
-            still filed against them before closing this out.
-          </p>
-        )}
-      </Group>
-    </>
+      <Field label="Department">
+        <input
+          value={person.department ?? ''}
+          onChange={(e) => patch({ department: e.target.value || null })}
+          list="departments"
+          className={inputClass}
+        />
+        <datalist id="departments">
+          {departments.map((d) => (
+            <option key={d} value={d} />
+          ))}
+        </datalist>
+      </Field>
+    </Group>
   );
 }
 
@@ -1649,6 +1536,13 @@ function OwnerPicker({
     [people],
   );
 
+  // Suggest departments already in use on the People page, rather than a
+  // blank box with no sense of what's already been typed elsewhere.
+  const departments = useMemo(
+    () => [...new Set(roster.map((r) => r.department).filter((d): d is string => !!d))].sort(),
+    [roster],
+  );
+
   const matched = roster.find((r) =>
     value.email
       ? r.email?.toLowerCase() === value.email.toLowerCase()
@@ -1660,7 +1554,66 @@ function OwnerPicker({
   // back) is a click either way, in both directions.
   const [manual, setManual] = useState(true);
 
+  // The list itself is only useful while choosing. Once a name is picked it
+  // collapses to a one-line summary — same idea as a native <select> closing
+  // after a choice — with a "Change" link to bring the list back.
+  const [browsing, setBrowsing] = useState(!matched);
+
+  const pick = (owner: Owner) => {
+    onChange(owner);
+    setBrowsing(false);
+  };
+
   if (roster.length > 0 && !manual) {
+    if (!browsing) {
+      const summary = (
+        <Field label="Person" hint="From the employee list, so allocations stay linked">
+          <div className={`${inputClass} flex items-center justify-between`}>
+            <span className={matched ? 'text-ink' : 'text-ink-3'}>{matched?.name ?? 'Nobody yet'}</span>
+            <button
+              type="button"
+              onClick={() => setBrowsing(true)}
+              className="text-[11.5px] text-ink-3 underline decoration-line-strong underline-offset-2 hover:text-ink"
+            >
+              Change
+            </button>
+          </div>
+        </Field>
+      );
+
+      if (isAsset) {
+        return (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {summary}
+            {matched?.department && (
+              <Field label="Department">
+                <p className={`${inputClass} flex items-center bg-bg/50 text-ink-2`}>
+                  {matched.department}
+                </p>
+              </Field>
+            )}
+          </div>
+        );
+      }
+
+      return (
+        <>
+          {summary}
+          {matched && (
+            <div className="-mt-2 mb-4">
+              {matched.email ? (
+                <p className="font-mono text-[11px] text-ink-3">{matched.email}</p>
+              ) : (
+                <p className="text-[11px] text-fair">
+                  No work email on their record, so allocation matches on name alone.
+                </p>
+              )}
+            </div>
+          )}
+        </>
+      );
+    }
+
     // A native <select> stays collapsed until clicked, which reads as an
     // empty control rather than "the employee list." This lays every name
     // out as its own row instead, so the list is what's actually on screen.
@@ -1669,10 +1622,10 @@ function OwnerPicker({
         active ? 'bg-accent/10 text-accent' : 'text-ink-2 hover:bg-hover'
       } ${extra}`;
 
-    const person = (
+    return (
       <Field label="Person" hint="From the employee list, so allocations stay linked">
         <div className="max-h-[220px] overflow-y-auto rounded-[8px] border border-line">
-          <button type="button" aria-pressed={!matched} onClick={() => onChange(clear)} className={row(!matched)}>
+          <button type="button" aria-pressed={!matched} onClick={() => pick(clear)} className={row(!matched)}>
             Nobody yet
           </button>
           {roster.map((r) => (
@@ -1680,7 +1633,7 @@ function OwnerPicker({
               key={r.id}
               type="button"
               aria-pressed={matched?.id === r.id}
-              onClick={() => onChange({ name: r.name, email: r.email, department: r.department })}
+              onClick={() => pick({ name: r.name, email: r.email, department: r.department })}
               className={row(matched?.id === r.id)}
             >
               {r.name}
@@ -1698,41 +1651,6 @@ function OwnerPicker({
           </button>
         </div>
       </Field>
-    );
-
-    // A plain option string cannot carry a styled subtitle, so the
-    // department reads as its own field beside the picker — the same slot
-    // it takes in the manual layout below — instead of trailing underneath.
-    if (isAsset) {
-      return (
-        <div className="grid gap-4 sm:grid-cols-2">
-          {person}
-          {matched?.department && (
-            <Field label="Department">
-              <p className={`${inputClass} flex items-center bg-bg/50 text-ink-2`}>
-                {matched.department}
-              </p>
-            </Field>
-          )}
-        </div>
-      );
-    }
-
-    return (
-      <>
-        {person}
-        {matched && (
-          <div className="-mt-2 mb-4">
-            {matched.email ? (
-              <p className="font-mono text-[11px] text-ink-3">{matched.email}</p>
-            ) : (
-              <p className="text-[11px] text-fair">
-                No work email on their record, so allocation matches on name alone.
-              </p>
-            )}
-          </div>
-        )}
-      </>
     );
   }
 
@@ -1752,9 +1670,15 @@ function OwnerPicker({
             <input
               value={value.department ?? ''}
               onChange={(e) => onChange({ ...value, department: e.target.value || null })}
+              list="owner-departments"
               placeholder="AI"
               className={inputClass}
             />
+            <datalist id="owner-departments">
+              {departments.map((d) => (
+                <option key={d} value={d} />
+              ))}
+            </datalist>
           </Field>
         ) : (
           <Field label="Email" error={emailValid ? null : 'Not a valid email address'}>

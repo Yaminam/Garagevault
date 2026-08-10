@@ -205,9 +205,12 @@ function Detail({ item, onBack, onEdit }: { item: VaultItem; onBack: () => void;
       {/* Owner. A secret with no named owner has nobody to rotate it. */}
       <div className="mt-5 flex items-center gap-3 rounded-[12px] border border-line bg-panel px-4 py-3">
         <UserCircle size={18} weight="bold" className="shrink-0 text-ink-3" />
-        {item.owner?.name || item.owner?.email ? (
+        {item.owner?.name || item.owner?.email || item.owner?.department ? (
           <div className="min-w-0">
             <p className="truncate text-[13px] text-ink">{item.owner.name ?? 'Unnamed'}</p>
+            {item.owner.department && (
+              <p className="truncate text-[11.5px] text-ink-3">{item.owner.department}</p>
+            )}
             {item.owner.email && (
               <p className="truncate text-[11.5px] text-ink-3">{item.owner.email}</p>
             )}
@@ -392,8 +395,15 @@ function headlineFor(item: VaultItem): string {
       return `${item.vars.length} ${item.vars.length === 1 ? 'variable' : 'variables'}`;
     case 'billing':
       return item.billing?.vendor ?? 'No vendor recorded';
-    case 'asset':
-      return [item.asset?.make, item.asset?.model].filter(Boolean).join(' ') || 'No device recorded';
+    case 'asset': {
+      // The title is already "make model" now, so repeating that here would
+      // just echo it back. What's worth a second line is what kind of thing
+      // this is and who has it.
+      const category = item.asset?.category
+        ? (ASSET_CATEGORY_LABEL[item.asset.category] ?? item.asset.category)
+        : 'Asset';
+      return item.owner?.name ? `${category} · Allocated to ${item.owner.name}` : `${category} · Unallocated`;
+    }
     case 'org':
       return item.org?.legalName ?? 'No registered name';
     case 'person':

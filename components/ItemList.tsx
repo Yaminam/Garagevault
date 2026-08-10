@@ -13,6 +13,7 @@ import {
   X,
 } from '@phosphor-icons/react/dist/ssr';
 import { scorePassword } from '@/lib/audit.ts';
+import { ASSET_CATEGORY_LABEL } from '@/lib/assets.ts';
 import { brandMarkForItem } from '@/lib/brand-marks.ts';
 import type { VaultItem } from '@/lib/types.ts';
 import { BrandTile, Monogram, tileClass } from './primitives.tsx';
@@ -292,7 +293,11 @@ function subtitleOf(item: VaultItem): string {
     case 'asset': {
       const a = item.asset;
       if (!a) return item.entity;
-      return [a.tag, item.owner?.name ?? a.location].filter(Boolean).join(' · ') || item.entity;
+      // The title is "make model" now, so two of the same laptop read as
+      // identical rows unless the line underneath actually tells them apart.
+      // Category and who has it does that; the tag code on its own did not.
+      const category = a.category ? (ASSET_CATEGORY_LABEL[a.category] ?? a.category) : null;
+      return [category, item.owner?.name ?? 'Unallocated'].filter(Boolean).join(' · ');
     }
     default:
       return item.username ?? item.accountType ?? item.entity;
