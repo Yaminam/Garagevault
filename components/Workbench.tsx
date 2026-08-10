@@ -10,7 +10,7 @@ import {
   Plus,
 } from '@phosphor-icons/react/dist/ssr';
 import type { Identity } from '@/lib/identity.ts';
-import { listProjects, rememberProject } from '@/lib/projects.ts';
+import { forgetProject, listProjects, rememberProject } from '@/lib/projects.ts';
 import { CATEGORIES, type ItemKind, type VaultItem } from '@/lib/types.ts';
 import { useVault } from './vault-context.tsx';
 import { Sidebar, type Filter } from './Sidebar.tsx';
@@ -342,6 +342,15 @@ export function Workbench({ identity, onSwitchUser }: Props) {
             onImportInvoices={() => setImportingInvoices(true)}
             onSwitchUser={onSwitchUser}
             onAddProject={() => setAddingProject(true)}
+            onRemoveProject={(name) => {
+              forgetProject(name);
+              setProjectsRevision((r) => r + 1);
+              // Leaving the filter pointed at a project that no longer exists
+              // would strand the list on a heading with nothing under it.
+              setFilter((current) =>
+                current.kind === 'project' && current.name === name ? { kind: 'all' } : current,
+              );
+            }}
             // A new tab would have no key and so no data: the vault is only
             // decrypted in this one. Printing happens here instead.
             onPrintLabels={() => setPrinting(true)}

@@ -78,5 +78,45 @@ export function parseAssetQr(text: string): Record<string, string> | null {
   return out;
 }
 
+/* ------------------------------------------------------------------ url ---- */
+
+// UTF-8 safe base64url, so a name with an accent round-trips. Browser only:
+// both call sites (the label sheet and the page reading the fragment) run in
+// the tab, never on the server.
+function toBase64Url(text: string): string {
+  const b64 = btoa(unescape(encodeURIComponent(text)));
+  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function fromBase64Url(value: string): string {
+  const padded = value.replace(/-/g, '+').replace(/_/g, '/');
+  const b64 = padded + '='.repeat((4 - (padded.length % 4)) % 4);
+  return decodeURIComponent(escape(atob(b64)));
+}
+
+/**
+ * What actually goes on the label now: a URL, not raw text. The old plain
+ * `key=value` payload read fine in a camera's own preview but went nowhere on
+ * tap, which is what a QR code is for. The same non-secret fields ride in the
+ * URL fragment instead of a query string, so the data never reaches a server
+ * even though nothing here is confidential in the first place.
+ */
+export function assetQrUrl(item: VaultItem, origin: string): string {
+  return `${origin}/a#${toBase64Url(assetQrPayload(item))}`;
+}
+
+/** Empty during the server render pass; real once hydrated in the tab. */
+export const currentOrigin = (): string =>
+  typeof window === 'undefined' ? '' : window.location.origin;
+
+/** The inverse, for the page the QR opens. */
+export function decodeAssetQrFragment(fragment: string): Record<string, string> | null {
+  try {
+    return parseAssetQr(fromBase64Url(fragment));
+  } catch {
+    return null;
+  }
+}
+
 export const STATUS_FROM_QR = (value: string | undefined): AssetStatus =>
   value === 'spare' || value === 'repair' || value === 'retired' ? value : 'in-use';

@@ -25,8 +25,8 @@ import {
 } from '@phosphor-icons/react/dist/ssr';
 import { VERDICT_LABEL, scorePassword } from '@/lib/audit.ts';
 import { toEnvBlock } from '@/lib/env-templates.ts';
-import { ASSET_CATEGORY_LABEL } from '@/lib/assets.ts';
-import { assetQrPayload } from '@/lib/qr.ts';
+import { ASSET_CATEGORY_LABEL, withGb } from '@/lib/assets.ts';
+import { assetQrUrl, currentOrigin } from '@/lib/qr.ts';
 import { checkGstin } from '@/lib/org.ts';
 import {
   ASSET_STATUS_LABEL,
@@ -765,7 +765,7 @@ function AssetPanel({ item }: { item: VaultItem }) {
   const asset = item.asset;
   if (!asset) return null;
 
-  const payload = assetQrPayload(item);
+  const payload = assetQrUrl(item, currentOrigin());
 
   async function markReceived(received: boolean) {
     setSaving(true);
@@ -874,9 +874,22 @@ function AssetPanel({ item }: { item: VaultItem }) {
         {asset.category && (
           <TextRow label="Category" value={ASSET_CATEGORY_LABEL[asset.category] ?? asset.category} />
         )}
+        {asset.specs?.cpu && <TextRow label="CPU" value={asset.specs.cpu} />}
+        {asset.specs?.ram && <TextRow label="RAM" value={withGb(asset.specs.ram)!} />}
+        {asset.specs?.storage && <TextRow label="Storage" value={withGb(asset.specs.storage)!} />}
+        {asset.specs?.gpu && <TextRow label="GPU" value={asset.specs.gpu} />}
         {asset.location && <TextRow label="Location" value={asset.location} />}
         {asset.purchasedOn && <TextRow label="Purchased" value={asset.purchasedOn} />}
-        {asset.warrantyUntil && <TextRow label="Warranty" value={asset.warrantyUntil} />}
+        {(asset.warrantyStart || asset.warrantyUntil) && (
+          <TextRow
+            label="Warranty"
+            value={
+              asset.warrantyStart && asset.warrantyUntil
+                ? `${asset.warrantyStart} – ${asset.warrantyUntil}`
+                : (asset.warrantyStart ?? asset.warrantyUntil)!
+            }
+          />
+        )}
         {asset.cost != null && (
           <TextRow label="Cost" value={`${asset.currency} ${asset.cost.toLocaleString()}`} />
         )}

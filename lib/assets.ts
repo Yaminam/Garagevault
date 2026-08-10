@@ -12,39 +12,17 @@
  * since it is printed on physical labels and changing it renames every tag.
  */
 const CATEGORIES: { id: string; label: string; code: string }[] = [
-  // Computers
   { id: 'laptop', label: 'Laptop', code: 'LT' },
   { id: 'desktop', label: 'Desktop', code: 'DT' },
   { id: 'monitor', label: 'Monitor', code: 'MN' },
   { id: 'tablet', label: 'Tablet', code: 'TB' },
   { id: 'phone', label: 'Phone', code: 'PH' },
-  // Peripherals
   { id: 'keyboard', label: 'Keyboard', code: 'KB' },
   { id: 'mouse', label: 'Mouse', code: 'MS' },
-  { id: 'dock', label: 'Dock / hub', code: 'DK' },
   { id: 'printer', label: 'Printer / scanner', code: 'PT' },
-  { id: 'peripheral', label: 'Other peripheral', code: 'PR' },
-  // Media
-  { id: 'camera', label: 'Camera', code: 'CM' },
-  { id: 'lens', label: 'Lens', code: 'LN' },
-  { id: 'microphone', label: 'Microphone', code: 'MC' },
   { id: 'headphones', label: 'Headphones', code: 'HP' },
-  { id: 'speaker', label: 'Speaker', code: 'SP' },
-  { id: 'lighting', label: 'Lighting', code: 'LG' },
-  { id: 'tripod', label: 'Tripod / rig', code: 'TR' },
-  { id: 'drone', label: 'Drone', code: 'DN' },
-  { id: 'projector', label: 'Projector', code: 'PJ' },
-  // Infrastructure
-  { id: 'server', label: 'Server', code: 'SV' },
-  { id: 'storage', label: 'Storage / NAS', code: 'ST' },
-  { id: 'drive', label: 'External drive', code: 'HD' },
-  { id: 'network', label: 'Router / network', code: 'NW' },
   { id: 'ups', label: 'UPS / power', code: 'UP' },
-  // Intangible
-  { id: 'sim', label: 'SIM / connection', code: 'SM' },
-  { id: 'license', label: 'Software licence', code: 'LC' },
-  // Fallback
-  { id: 'furniture', label: 'Furniture', code: 'FN' },
+  { id: 'charger', label: 'Charger', code: 'CG' },
   { id: 'other', label: 'Other', code: 'AS' },
 ];
 
@@ -54,6 +32,18 @@ const CATEGORY_CODE: Record<string, string> = Object.fromEntries(
 
 /** Ids for the picker, in the curated order above. */
 export const ASSET_CATEGORIES = CATEGORIES.map((c) => c.id);
+
+/** Categories a CPU/RAM/storage spec sheet actually applies to. */
+export const SPECABLE_CATEGORIES = new Set(['laptop', 'desktop']);
+export const isSpecable = (category: string | null) => SPECABLE_CATEGORIES.has(category ?? '');
+
+/**
+ * RAM and storage are entered as free text so "16 GB" and "1 TB SSD" both fit,
+ * but a bare number typed without a unit ("8", "256") is unambiguously GB in
+ * practice, so that unit is filled in for display rather than left silent.
+ */
+export const withGb = (value: string | null): string | null =>
+  value && /^\d+$/.test(value.trim()) ? `${value.trim()} GB` : value;
 
 /** Human labels, so the dropdown reads "Storage / NAS" not "storage". */
 export const ASSET_CATEGORY_LABEL: Record<string, string> = Object.fromEntries(

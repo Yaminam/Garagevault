@@ -119,6 +119,7 @@ export type ItemFields = {
     status: AssetStatus;
     /** ISO dates. */
     purchasedOn: string | null;
+    warrantyStart: string | null;
     warrantyUntil: string | null;
     cost: number | null;
     currency: string;
@@ -130,6 +131,13 @@ export type ItemFields = {
     received: boolean;
     receivedOn: string | null;
     scannedAt: string | null;
+    /** Only meaningful for a computer. Null entirely for a monitor or a UPS. */
+    specs: {
+      cpu: string | null;
+      ram: string | null;
+      storage: string | null;
+      gpu: string | null;
+    } | null;
   } | null;
 
   // --- org -----------------------------------------------------------------
@@ -252,6 +260,7 @@ export function emptyAsset(tag: string): ItemFields {
       serial: null,
       status: 'in-use',
       purchasedOn: null,
+      warrantyStart: null,
       warrantyUntil: null,
       cost: null,
       currency: 'INR',
@@ -259,6 +268,7 @@ export function emptyAsset(tag: string): ItemFields {
       received: false,
       receivedOn: null,
       scannedAt: null,
+      specs: null,
     },
   };
 }

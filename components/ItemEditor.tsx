@@ -21,7 +21,7 @@ import { scorePassword, VERDICT_LABEL } from '@/lib/audit.ts';
 import { ENV_TEMPLATES, looksSecret, parseEnvBlock, templateById } from '@/lib/env-templates.ts';
 import type { Identity } from '@/lib/identity.ts';
 import { rememberProject } from '@/lib/projects.ts';
-import { ASSET_CATEGORIES, ASSET_CATEGORY_LABEL, nextAssetTag } from '@/lib/assets.ts';
+import { ASSET_CATEGORIES, ASSET_CATEGORY_LABEL, isSpecable, nextAssetTag } from '@/lib/assets.ts';
 import { applyInvoice, filledLabels } from '@/lib/billing.ts';
 import {
   DEPARTMENTS,
@@ -307,39 +307,45 @@ export function ItemEditor({
               />
             </Field>
 
-            <div className={SHOWS_PROJECT[fields.kind] ? 'grid gap-4 sm:grid-cols-2' : ''}>
-              {SHOWS_PROJECT[fields.kind] && (
-                <Field
-                  label="Project"
-                  required={projectRequired}
-                  hint={
-                    projectRequired
-                      ? 'Environment files file under a project'
-                      : 'Which product this belongs to'
-                  }
-                >
-                  <ProjectPicker
-                    value={fields.project}
-                    options={projects}
-                    onChange={(next) => set('project', next)}
-                  />
-                </Field>
-              )}
+            {/* Every asset already belongs to the one org that owns the vault,
+                so asking per-device is a field nobody changes — it just adds a
+                click. Other kinds keep it, since a login or a bill can
+                genuinely sit under a different entity. */}
+            {fields.kind !== 'asset' && (
+              <div className={SHOWS_PROJECT[fields.kind] ? 'grid gap-4 sm:grid-cols-2' : ''}>
+                {SHOWS_PROJECT[fields.kind] && (
+                  <Field
+                    label="Project"
+                    required={projectRequired}
+                    hint={
+                      projectRequired
+                        ? 'Environment files file under a project'
+                        : 'Which product this belongs to'
+                    }
+                  >
+                    <ProjectPicker
+                      value={fields.project}
+                      options={projects}
+                      onChange={(next) => set('project', next)}
+                    />
+                  </Field>
+                )}
 
-              <Field label="Entity" hint={fields.kind === 'asset' ? 'Which company owns it' : undefined}>
-                <input
-                  value={fields.entity}
-                  onChange={(e) => set('entity', e.target.value)}
-                  list="vault-entities"
-                  className={inputClass}
-                />
-                <datalist id="vault-entities">
-                  {entities.map((e) => (
-                    <option key={e} value={e} />
-                  ))}
-                </datalist>
-              </Field>
-            </div>
+                <Field label="Entity">
+                  <input
+                    value={fields.entity}
+                    onChange={(e) => set('entity', e.target.value)}
+                    list="vault-entities"
+                    className={inputClass}
+                  />
+                  <datalist id="vault-entities">
+                    {entities.map((e) => (
+                      <option key={e} value={e} />
+                    ))}
+                  </datalist>
+                </Field>
+              </div>
+            )}
           </Group>
 
           {/* Both halves matter: something with no named owner is something
@@ -860,6 +866,7 @@ function AssetFields({
   const asset = fields.asset ?? emptyAsset('GC-AS-0001').asset!;
   const patch = (next: Partial<NonNullable<ItemFields['asset']>>) =>
     set('asset', { ...asset, ...next });
+  const emptySpecs = () => ({ cpu: null, ram: null, storage: null, gpu: null });
 
   return (
     <>
@@ -936,13 +943,72 @@ function AssetFields({
         </Field>
       </Group>
 
+      {/* Only a laptop or a desktop has a chip, memory and a drive to speak
+          of — a monitor or a UPS has nothing here worth asking for. */}
+      {isSpecable(asset.category) && (
+        <Group title="Specs" hint="What is actually inside it">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="CPU">
+              <input
+                value={asset.specs?.cpu ?? ''}
+                onChange={(e) =>
+                  patch({ specs: { ...(asset.specs ?? emptySpecs()), cpu: e.target.value || null } })
+                }
+                placeholder="Apple M2 Pro"
+                className={inputClass}
+              />
+            </Field>
+            <Field label="RAM">
+              <input
+                value={asset.specs?.ram ?? ''}
+                onChange={(e) =>
+                  patch({ specs: { ...(asset.specs ?? emptySpecs()), ram: e.target.value || null } })
+                }
+                placeholder="16 GB"
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Storage">
+              <input
+                value={asset.specs?.storage ?? ''}
+                onChange={(e) =>
+                  patch({
+                    specs: { ...(asset.specs ?? emptySpecs()), storage: e.target.value || null },
+                  })
+                }
+                placeholder="512 GB SSD"
+                className={inputClass}
+              />
+            </Field>
+            <Field label="GPU">
+              <input
+                value={asset.specs?.gpu ?? ''}
+                onChange={(e) =>
+                  patch({ specs: { ...(asset.specs ?? emptySpecs()), gpu: e.target.value || null } })
+                }
+                placeholder="Integrated"
+                className={inputClass}
+              />
+            </Field>
+          </div>
+        </Group>
+      )}
+
       <Group title="Purchase">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Purchased on">
             <input
               type="date"
               value={asset.purchasedOn ?? ''}
               onChange={(e) => patch({ purchasedOn: e.target.value || null })}
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Warranty start">
+            <input
+              type="date"
+              value={asset.warrantyStart ?? ''}
+              onChange={(e) => patch({ warrantyStart: e.target.value || null })}
               className={inputClass}
             />
           </Field>
@@ -956,26 +1022,14 @@ function AssetFields({
           </Field>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Cost">
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={asset.cost ?? ''}
-              onChange={(e) => patch({ cost: e.target.value === '' ? null : Number(e.target.value) })}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Location">
-            <input
-              value={asset.location ?? ''}
-              onChange={(e) => patch({ location: e.target.value || null })}
-              placeholder="Bengaluru studio"
-              className={inputClass}
-            />
-          </Field>
-        </div>
+        <Field label="Location">
+          <input
+            value={asset.location ?? ''}
+            onChange={(e) => patch({ location: e.target.value || null })}
+            placeholder="Bengaluru studio"
+            className={inputClass}
+          />
+        </Field>
       </Group>
 
       {/* Assigning and actually handing over are different events, and the gap

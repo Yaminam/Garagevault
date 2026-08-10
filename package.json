@@ -11,6 +11,7 @@
     "seed:invoices": "node --env-file=.env.local tools/seed-invoices.ts",
     "import:env": "node --env-file=.env.local tools/import-env.ts",
     "attach:invoices": "node --env-file=.env.local tools/attach-invoices.ts",
+    "import:sample-assets": "node --env-file=.env.local tools/import-sample-assets.ts",
     "add:password": "node --env-file=.env.local tools/add-password.ts",
     "remove:password": "node --env-file=.env.local tools/remove-password.ts",
     "rekey": "node --env-file=.env.local tools/rekey.ts",

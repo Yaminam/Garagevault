@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { Barcode, Printer, X } from '@phosphor-icons/react/dist/ssr';
-import { assetQrPayload } from '@/lib/qr.ts';
+import { assetQrUrl, currentOrigin } from '@/lib/qr.ts';
 import type { VaultItem } from '@/lib/types.ts';
 import { AssetLabel } from './BarcodeLabel.tsx';
 
@@ -35,7 +35,7 @@ export function PrintLabels({ items, onClose }: { items: VaultItem[]; onClose: (
         title: asset.title,
         serial: asset.asset!.serial,
         assignee: asset.owner?.name ?? null,
-        qr: assetQrPayload(asset),
+        qr: assetQrUrl(asset, currentOrigin()),
       })),
     );
   }, [assets, selected, copies]);
@@ -49,7 +49,7 @@ export function PrintLabels({ items, onClose }: { items: VaultItem[]; onClose: (
     });
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-bg print:static print:bg-white">
+    <div className="fixed inset-0 z-50 flex flex-col bg-bg print:bg-white">
       {/* Controls. Hidden when printing. */}
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line px-4 print:hidden">
         <span className="grid h-8 w-8 place-items-center rounded-[8px] border border-accent/35 bg-accent/12 text-accent">

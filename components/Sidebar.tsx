@@ -26,6 +26,7 @@ import {
   SquaresFour,
   ChartLineUp,
   FileArrowUp,
+  X,
 } from '@phosphor-icons/react/dist/ssr';
 import type { Audit } from '@/lib/audit.ts';
 import { initialsOf, type Identity } from '@/lib/identity.ts';
@@ -74,6 +75,11 @@ type Props = {
   onImportInvoices: () => void;
   onSwitchUser: () => void;
   onAddProject: () => void;
+  /**
+   * Discard an empty project. Only offered at zero entries: the list is derived
+   * from the entries themselves, so a project in use would come straight back.
+   */
+  onRemoveProject: (name: string) => void;
   onPrintLabels: () => void;
 };
 
@@ -93,6 +99,7 @@ export function Sidebar({
   onImportInvoices,
   onSwitchUser,
   onAddProject,
+  onRemoveProject,
   onPrintLabels,
 }: Props) {
   const reduce = useReducedMotion();
@@ -238,6 +245,10 @@ export function Sidebar({
                 count,
                 active: is((f) => f.kind === 'project' && f.name === name),
                 onClick: () => onFilter({ kind: 'project', name }),
+                // An empty project exists only as a remembered name, so it is
+                // the only kind that can actually be got rid of from here.
+                onRemove: count === 0 ? () => onRemoveProject(name) : undefined,
+                removeLabel: `Remove the empty project ${name}`,
               }),
             )
           )}
@@ -386,36 +397,60 @@ type RowProps = {
   count?: number;
   active: boolean;
   onClick: () => void;
+  /** Adds a discard control, revealed on hover. Absent leaves the row fixed. */
+  onRemove?: () => void;
+  removeLabel?: string;
   reduce: boolean;
 };
 
-function Row({ icon, label, count, active, onClick, reduce }: RowProps) {
+function Row({ icon, label, count, active, onClick, onRemove, removeLabel, reduce }: RowProps) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-current={active ? 'true' : undefined}
-      className={`group relative flex w-full items-center gap-2.5 rounded-[8px] px-2 py-[7px] text-left text-[13px] transition-colors
-        ${active ? 'text-ink' : 'text-ink-2 hover:bg-hover/50 hover:text-ink'}`}
-    >
-      {/* The lit pill slides between rows rather than blinking, so the eye can
-          follow where the selection went. */}
-      {active && (
-        <motion.span
-          layoutId={reduce ? undefined : 'nav-active'}
-          transition={{ type: 'spring', stiffness: 520, damping: 42 }}
-          className="absolute inset-0 -z-10 rounded-[8px] border border-line bg-hover"
-        />
-      )}
-      <span className={active ? 'text-accent' : 'text-ink-3 group-hover:text-ink-2'}>{icon}</span>
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      {count !== undefined && (
-        <span
-          className={`shrink-0 font-mono text-[11px] tabular-nums ${active ? 'text-ink-2' : 'text-ink-3'}`}
+    // The discard control cannot live inside the row's button — nesting one
+    // button in another is invalid and the inner click never arrives — so the
+    // two sit side by side and this wrapper carries the hover group.
+    <div className="group relative">
+      <button
+        type="button"
+        onClick={onClick}
+        aria-current={active ? 'true' : undefined}
+        className={`relative flex w-full items-center gap-2.5 rounded-[8px] px-2 py-[7px] text-left text-[13px] transition-colors
+          ${active ? 'text-ink' : 'text-ink-2 hover:bg-hover/50 hover:text-ink'}`}
+      >
+        {/* The lit pill slides between rows rather than blinking, so the eye can
+            follow where the selection went. */}
+        {active && (
+          <motion.span
+            layoutId={reduce ? undefined : 'nav-active'}
+            transition={{ type: 'spring', stiffness: 520, damping: 42 }}
+            className="absolute inset-0 -z-10 rounded-[8px] border border-line bg-hover"
+          />
+        )}
+        <span className={active ? 'text-accent' : 'text-ink-3 group-hover:text-ink-2'}>{icon}</span>
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        {count !== undefined && (
+          <span
+            className={`shrink-0 font-mono text-[11px] tabular-nums transition-opacity
+              ${active ? 'text-ink-2' : 'text-ink-3'}
+              ${onRemove ? 'group-hover:opacity-0' : ''}`}
+          >
+            {count}
+          </span>
+        )}
+      </button>
+
+      {/* Takes the count's place on hover. A removable row is always at zero,
+          so nothing readable is being covered up. */}
+      {onRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          title={removeLabel ?? 'Remove'}
+          aria-label={removeLabel ?? 'Remove'}
+          className="absolute right-1.5 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded-[5px] text-ink-3 opacity-0 transition hover:bg-hover hover:text-weak focus-visible:opacity-100 group-hover:opacity-100"
         >
-          {count}
-        </span>
+          <X size={11} weight="bold" />
+        </button>
       )}
-    </button>
+    </div>
   );
 }

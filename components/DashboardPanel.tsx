@@ -76,6 +76,16 @@ export function DashboardPanel({ identity, onFilter, onView, onOpen }: Props) {
     // "This month" by the paid date, which is what a monthly close looks at.
     const now = new Date();
     const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    // Warranties due out in the next 30 days. Already-expired ones are a
+    // separate, older problem and would just sit in this count forever, so
+    // this is a heads-up window rather than a running tally of neglect.
+    const today = now.toISOString().slice(0, 10);
+    const warrantyHorizon = new Date(now.getTime() + 30 * 86_400_000).toISOString().slice(0, 10);
+    const warrantyExpiring = assets.filter((a) => {
+      const until = a.asset?.warrantyUntil;
+      return until && until >= today && until <= warrantyHorizon;
+    }).length;
     const thisMonth = sumByCurrency(bills, (b) => (b.billing?.paidOn ?? '').startsWith(ym));
 
     const recurring = sumByCurrency(
@@ -93,6 +103,7 @@ export function DashboardPanel({ identity, onFilter, onView, onOpen }: Props) {
       assets,
       assetsCount: assets.length,
       notReceived: assets.filter((a) => a.asset && !a.asset.received).length,
+      warrantyExpiring,
       people: by('person').length,
       orgs: by('org').length,
       thisMonth,
@@ -123,7 +134,11 @@ export function DashboardPanel({ identity, onFilter, onView, onOpen }: Props) {
   );
 
   const attention =
-    audit.fragile.length + audit.reused.length + audit.incomplete.length + stats.notReceived;
+    audit.fragile.length +
+    audit.reused.length +
+    audit.incomplete.length +
+    stats.notReceived +
+    stats.warrantyExpiring;
 
   const healthTone = audit.health >= 75 ? 'text-strong' : audit.health >= 45 ? 'text-fair' : 'text-weak';
   const healthBar = audit.health >= 75 ? 'bg-strong' : audit.health >= 45 ? 'bg-fair' : 'bg-weak';
@@ -240,6 +255,7 @@ export function DashboardPanel({ identity, onFilter, onView, onOpen }: Props) {
               <HealthRow label="Reused" count={audit.reused.length} onClick={() => onView('health')} />
               <HealthRow label="Missing a password" count={audit.incomplete.length} onClick={() => onView('health')} />
               <HealthRow label="Assets not received" count={stats.notReceived} icon={<Package size={13} weight="bold" />} onClick={() => onFilter({ kind: 'assets' })} />
+              <HealthRow label="Warranty expiring in 30 days" count={stats.warrantyExpiring} icon={<Pulse size={13} weight="bold" />} onClick={() => onFilter({ kind: 'assets' })} />
             </div>
           </section>
         </div>
