@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { Barcode, Printer, X } from '@phosphor-icons/react/dist/ssr';
+import { ASSET_CATEGORY_LABEL } from '@/lib/assets.ts';
 import { assetQrUrl, currentOrigin } from '@/lib/qr.ts';
 import type { VaultItem } from '@/lib/types.ts';
 import { AssetLabel } from './BarcodeLabel.tsx';
@@ -26,6 +27,31 @@ export function PrintLabels({ items, onClose }: { items: VaultItem[]; onClose: (
   const [selected, setSelected] = useState<Set<string>>(() => new Set(assets.map((a) => a.id)));
   const [copies, setCopies] = useState(1);
 
+  // Narrows which tags are offered below, not what's already picked to print
+  // — switching the filter should never silently drop something you already
+  // chose. Both rows show at once rather than behind a tab, so filtering by
+  // category and by person can be combined.
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [employeeFilter, setEmployeeFilter] = useState<string | null>(null);
+
+  const categories = useMemo(
+    () => [...new Set(assets.map((a) => a.asset?.category).filter((c): c is string => !!c))].sort(),
+    [assets],
+  );
+  const employees = useMemo(
+    () => [...new Set(assets.map((a) => a.owner?.name).filter((n): n is string => !!n))].sort(),
+    [assets],
+  );
+  const visible = useMemo(
+    () =>
+      assets.filter(
+        (a) =>
+          (!categoryFilter || a.asset?.category === categoryFilter) &&
+          (!employeeFilter || a.owner?.name === employeeFilter),
+      ),
+    [assets, categoryFilter, employeeFilter],
+  );
+
   const sheet = useMemo(() => {
     const chosen = assets.filter((asset) => selected.has(asset.id));
     return chosen.flatMap((asset) =>
@@ -33,8 +59,12 @@ export function PrintLabels({ items, onClose }: { items: VaultItem[]; onClose: (
         key: `${asset.id}-${copy}`,
         tag: asset.asset!.tag!,
         title: asset.title,
+        category: asset.asset!.category
+          ? (ASSET_CATEGORY_LABEL[asset.asset!.category] ?? asset.asset!.category)
+          : null,
         serial: asset.asset!.serial,
         assignee: asset.owner?.name ?? null,
+        department: asset.owner?.department ?? null,
         qr: assetQrUrl(asset, currentOrigin()),
       })),
     );
@@ -58,7 +88,7 @@ export function PrintLabels({ items, onClose }: { items: VaultItem[]; onClose: (
         <div className="min-w-0 flex-1">
           <p className="text-[14px] font-semibold tracking-tight text-ink">Asset labels</p>
           <p className="text-[11.5px] text-ink-3">
-            {sheet.length} {sheet.length === 1 ? 'label' : 'labels'} at 50 by 25mm
+            {sheet.length} {sheet.length === 1 ? 'label' : 'labels'} at 70 by 35mm
           </p>
         </div>
 
@@ -102,26 +132,68 @@ export function PrintLabels({ items, onClose }: { items: VaultItem[]; onClose: (
         ) : (
           <>
             {/* Picker */}
-            <div className="border-b border-line p-4 print:hidden">
+            <div className="space-y-2.5 border-b border-line p-4 print:hidden">
+              {categories.length > 1 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="mr-0.5 text-[11px] text-ink-3">Category</span>
+                  <FilterChip
+                    label="All"
+                    active={!categoryFilter}
+                    onClick={() => setCategoryFilter(null)}
+                  />
+                  {categories.map((c) => (
+                    <FilterChip
+                      key={c}
+                      label={ASSET_CATEGORY_LABEL[c] ?? c}
+                      active={categoryFilter === c}
+                      onClick={() => setCategoryFilter(categoryFilter === c ? null : c)}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {employees.length > 1 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="mr-0.5 text-[11px] text-ink-3">Person</span>
+                  <FilterChip
+                    label="All"
+                    active={!employeeFilter}
+                    onClick={() => setEmployeeFilter(null)}
+                  />
+                  {employees.map((e) => (
+                    <FilterChip
+                      key={e}
+                      label={e}
+                      active={employeeFilter === e}
+                      onClick={() => setEmployeeFilter(employeeFilter === e ? null : e)}
+                    />
+                  ))}
+                </div>
+              )}
+
               <div className="flex flex-wrap gap-1.5">
-                {assets.map((asset) => {
-                  const on = selected.has(asset.id);
-                  return (
-                    <button
-                      key={asset.id}
-                      type="button"
-                      onClick={() => toggle(asset.id)}
-                      aria-pressed={on}
-                      className={`rounded-full border px-3 py-1.5 font-mono text-[11.5px] transition ${
-                        on
-                          ? 'border-accent/40 bg-accent/12 text-accent'
-                          : 'border-line text-ink-3 hover:border-line-strong hover:text-ink-2'
-                      }`}
-                    >
-                      {asset.asset!.tag}
-                    </button>
-                  );
-                })}
+                {visible.length === 0 ? (
+                  <p className="text-[12px] text-ink-3">Nothing matches that filter.</p>
+                ) : (
+                  visible.map((asset) => {
+                    const on = selected.has(asset.id);
+                    return (
+                      <button
+                        key={asset.id}
+                        type="button"
+                        onClick={() => toggle(asset.id)}
+                        aria-pressed={on}
+                        className={`rounded-full border px-3 py-1.5 font-mono text-[11.5px] transition ${
+                          on
+                            ? 'border-accent/40 bg-accent/12 text-accent'
+                            : 'border-line text-ink-3 hover:border-line-strong hover:text-ink-2'
+                        }`}
+                      >
+                        {asset.asset!.tag}
+                      </button>
+                    );
+                  })
+                )}
               </div>
             </div>
 
@@ -135,6 +207,31 @@ export function PrintLabels({ items, onClose }: { items: VaultItem[]; onClose: (
         )}
       </div>
     </div>
+  );
+}
+
+function FilterChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`rounded-full border px-2.5 py-1 text-[11px] transition ${
+        active
+          ? 'border-accent/40 bg-accent/12 text-accent'
+          : 'border-line text-ink-3 hover:border-line-strong hover:text-ink-2'
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 

@@ -1143,8 +1143,12 @@ function AssetQrPreview({ fields }: { fields: ItemFields }) {
           data={{
             tag: fields.asset!.tag!,
             title: fields.title.trim(),
+            category: fields.asset?.category
+              ? (ASSET_CATEGORY_LABEL[fields.asset.category] ?? fields.asset.category)
+              : null,
             serial: fields.asset?.serial ?? null,
             assignee: fields.owner?.name ?? null,
+            department: fields.owner?.department ?? null,
             qr: qrValue,
           }}
           onClose={() => setPrinting(false)}

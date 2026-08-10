@@ -933,8 +933,10 @@ function AssetPanel({ item }: { item: VaultItem }) {
               data={{
                 tag: asset.tag ?? '',
                 title: item.title,
+                category: asset.category ? (ASSET_CATEGORY_LABEL[asset.category] ?? asset.category) : null,
                 serial: asset.serial,
                 assignee: item.owner?.name ?? null,
+                department: item.owner?.department ?? null,
                 qr: payload,
               }}
             />

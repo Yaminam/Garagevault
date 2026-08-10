@@ -368,6 +368,19 @@
     inset: 0 auto auto 0;
     width: 100%;
     padding: 0 !important;
+    /* A grid rather than flex-wrap: flex rows don't fragment across pages
+       reliably, so a sheet of 7-8 labels could overlap or split mid-label at
+       a page break. Grid rows break cleanly, and break-inside below stops a
+       single label from being cut in half between two pages. */
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, 70mm);
+    grid-auto-rows: 35mm;
+    gap: 3mm;
+  }
+
+  .print-sheet > * {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 
   * {

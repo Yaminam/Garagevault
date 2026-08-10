@@ -57,7 +57,7 @@ export function assetQrPayload(item: VaultItem): string {
     line('status', asset.status) +
     line('entity', item.entity) +
     line('holder', item.owner?.name) +
-    line('email', item.owner?.email) +
+    line('department', item.owner?.department) +
     line('location', asset.location) +
     line('purchased', asset.purchasedOn) +
     line('warranty', asset.warrantyUntil) +
