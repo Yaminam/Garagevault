@@ -3,7 +3,6 @@
 import { useMemo } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import {
-  Stack,
   EnvelopeSimple,
   ShieldCheck,
   ShareNetwork,
@@ -154,13 +153,6 @@ export function Sidebar({
             label: 'Dashboard',
             active: view === 'dashboard',
             onClick: () => onView('dashboard'),
-          })}
-          {row('all', {
-            icon: <Stack size={15} weight="bold" />,
-            label: 'All entries',
-            count: items.length,
-            active: is((f) => f.kind === 'all'),
-            onClick: () => onFilter({ kind: 'all' }),
           })}
           {row('billing', {
             icon: <Receipt size={15} weight="bold" />,
