@@ -9,10 +9,8 @@ import {
   FileArrowUp,
   FileText,
   Key,
-  Package,
   Pulse,
   Receipt,
-  ShieldWarning,
   UserPlus,
   UsersThree,
 } from '@phosphor-icons/react/dist/ssr';
@@ -44,7 +42,6 @@ type Jump =
 type Props = {
   identity: Identity | null;
   onFilter: (jump: Jump) => void;
-  onView: (view: 'health' | 'allocation') => void;
   onOpen: (id: string) => void;
   onNewItem: (kind: ItemKind) => void;
   onUploadInvoice: () => void;
@@ -96,12 +93,11 @@ function describeUpdate(item: VaultItem): string {
 export function DashboardPanel({
   identity,
   onFilter,
-  onView,
   onOpen,
   onNewItem,
   onUploadInvoice,
 }: Props) {
-  const { items, audit } = useVault();
+  const { items } = useVault();
 
   const stats = useMemo(() => {
     const by = (k: VaultItem['kind']) => items.filter((i) => i.kind === k);
@@ -117,16 +113,6 @@ export function DashboardPanel({
     // "This month" by the paid date, which is what a monthly close looks at.
     const now = new Date();
     const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-
-    // Warranties due out in the next 30 days. Already-expired ones are a
-    // separate, older problem and would just sit in this count forever, so
-    // this is a heads-up window rather than a running tally of neglect.
-    const today = now.toISOString().slice(0, 10);
-    const warrantyHorizon = new Date(now.getTime() + 30 * 86_400_000).toISOString().slice(0, 10);
-    const warrantyExpiring = assets.filter((a) => {
-      const until = a.asset?.warrantyUntil;
-      return until && until >= today && until <= warrantyHorizon;
-    }).length;
     const thisMonth = sumByCurrency(bills, (b) => (b.billing?.paidOn ?? '').startsWith(ym));
 
     const recurring = sumByCurrency(
@@ -143,8 +129,6 @@ export function DashboardPanel({
       billsCount: allBills.length,
       assets,
       assetsCount: assets.length,
-      notReceived: assets.filter((a) => a.asset && !a.asset.received).length,
-      warrantyExpiring,
       people: by('person').length,
       orgs: by('org').length,
       thisMonth,
@@ -186,10 +170,6 @@ export function DashboardPanel({
     const horizon = new Date(Date.now() - 7 * 86_400_000).toISOString();
     return items.filter((i) => i.updatedAt >= horizon).length;
   }, [items]);
-
-  const reduce = useReducedMotion();
-  const healthTone = audit.health >= 75 ? 'text-strong' : audit.health >= 45 ? 'text-fair' : 'text-weak';
-  const healthBar = audit.health >= 75 ? 'bg-strong' : audit.health >= 45 ? 'bg-fair' : 'bg-weak';
 
   const firstName = identity?.name?.split(' ')[0];
 
@@ -355,46 +335,9 @@ export function DashboardPanel({
             </section>
           </div>
 
-          {/* Right: Security, then Recently updated */}
+          {/* Right: Recently updated, then Assets by category */}
           <div className="flex flex-col gap-8">
             <section>
-              <div className="flex items-center justify-between">
-                <h2 className="text-[13.5px] font-semibold tracking-tight text-ink">Security</h2>
-                <button
-                  type="button"
-                  onClick={() => onView('health')}
-                  className="flex items-center gap-1 text-[11.5px] text-ink-3 hover:text-ink"
-                >
-                  Review <ArrowRight size={11} weight="bold" />
-                </button>
-              </div>
-
-              <div className="mt-3 flex items-end gap-3">
-                <span className={`font-mono text-[40px] font-medium leading-none ${healthTone}`}>
-                  <CountUp value={audit.health} />
-                </span>
-                <span className="mb-1 text-[12px] text-ink-3">/ 100</span>
-              </div>
-              <div className="mt-3 h-1 overflow-hidden rounded-full bg-line-strong">
-                <motion.div
-                  initial={reduce ? false : { width: 0 }}
-                  animate={{ width: `${audit.health}%` }}
-                  transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-                  className={`h-full rounded-full ${healthBar}`}
-                />
-              </div>
-
-              <div className="mt-4 space-y-px">
-                <HealthRow label="Weak or critical" count={audit.fragile.length} onClick={() => onView('health')} />
-                <HealthRow label="Reused" count={audit.reused.length} onClick={() => onView('health')} />
-                <HealthRow label="Missing a password" count={audit.incomplete.length} onClick={() => onView('health')} />
-                <HealthRow label="Assets not received" count={stats.notReceived} icon={<Package size={13} weight="bold" />} onClick={() => onFilter({ kind: 'assets' })} />
-                <HealthRow label="Warranty expiring in 30 days" count={stats.warrantyExpiring} icon={<Pulse size={13} weight="bold" />} onClick={() => onFilter({ kind: 'assets' })} />
-              </div>
-            </section>
-
-            {/* Recent */}
-            <section className="border-t border-line pt-8">
               <h2 className="text-[13.5px] font-semibold tracking-tight text-ink">Recently updated</h2>
               <div className="mt-3 space-y-px">
                 {recent.map((item) => (
@@ -421,6 +364,30 @@ export function DashboardPanel({
                   Assets by category
                 </h2>
                 <AssetCategoryBars assets={stats.assets} onOpen={() => onFilter({ kind: 'assets' })} />
+              </section>
+            )}
+
+            {/* Headcount by department, same "ranked bars" shape as Top
+                vendors — department names are open text someone typed, not
+                a fixed enumerable set like asset categories, so this ranks
+                by count in one hue rather than assigning each a colour. */}
+            {stats.people > 0 && (
+              <section className="border-t border-line pt-8">
+                <h2 className="text-[13.5px] font-semibold tracking-tight text-ink">
+                  People by department
+                </h2>
+                <PeopleByDepartment items={items} onOpen={() => onFilter({ kind: 'people' })} />
+              </section>
+            )}
+
+            {/* The offboarding question in reverse: not what one person
+                has, but which department is actually holding the fleet. */}
+            {stats.assets.length > 0 && (
+              <section className="border-t border-line pt-8">
+                <h2 className="text-[13.5px] font-semibold tracking-tight text-ink">
+                  Assets by department
+                </h2>
+                <AssetsByDepartment assets={stats.assets} onOpen={() => onFilter({ kind: 'assets' })} />
               </section>
             )}
           </div>
@@ -502,34 +469,6 @@ function Tile({
         <CountUp value={value} />
       </p>
       <p className="mt-1.5 truncate text-[11.5px] text-ink-3">{label}</p>
-    </button>
-  );
-}
-
-function HealthRow({
-  label,
-  count,
-  icon,
-  onClick,
-}: {
-  label: string;
-  count: number;
-  icon?: React.ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex w-full items-center gap-2.5 rounded-[6px] px-2 py-1.5 text-left transition hover:bg-hover"
-    >
-      <span className={count > 0 ? 'text-fair' : 'text-ink-3'}>
-        {icon ?? <ShieldWarning size={13} weight="bold" />}
-      </span>
-      <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-2">{label}</span>
-      <span className={`shrink-0 font-mono text-[12px] ${count > 0 ? 'text-ink' : 'text-ink-3'}`}>
-        {count}
-      </span>
     </button>
   );
 }
@@ -661,6 +600,98 @@ function AssetCategoryBars({ assets, onOpen }: { assets: VaultItem[]; onOpen: ()
               style={{
                 width: `${Math.max((row.count / rows.max) * 100, 4)}%`,
                 background: categoryColor(row.id),
+              }}
+            />
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Headcount ranked by department, same shape as VendorBars: one hue, since
+    a department name is free text someone typed rather than a fixed set. */
+function PeopleByDepartment({ items, onOpen }: { items: VaultItem[]; onOpen: () => void }) {
+  const rows = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of items) {
+      if (item.kind !== 'person' || item.person?.active === false) continue;
+      const department = item.person?.department?.trim();
+      if (!department) continue;
+      counts.set(department, (counts.get(department) ?? 0) + 1);
+    }
+    const ranked = [...counts.entries()]
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+      .slice(0, 6);
+    return { ranked, max: Math.max(1, ...ranked.map((r) => r.count)) };
+  }, [items]);
+
+  if (rows.ranked.length === 0) return null;
+
+  return (
+    <div className="mt-4 space-y-1.5">
+      {rows.ranked.map((row) => (
+        <button key={row.label} type="button" onClick={onOpen} className="block w-full text-left">
+          <div className="flex items-baseline justify-between gap-2 text-[11.5px]">
+            <span className="min-w-0 truncate text-ink-2">{row.label}</span>
+            <span className="shrink-0 font-mono text-ink-3">
+              {row.count} {row.count === 1 ? 'person' : 'people'}
+            </span>
+          </div>
+          <div className="mt-1 h-1 w-full">
+            <div
+              className="h-full rounded-full"
+              style={{
+                width: `${Math.max((row.count / rows.max) * 100, 4)}%`,
+                background: 'var(--chart-1)',
+              }}
+            />
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * How many assets each department is holding — the department comes from
+ * whoever an asset is assigned to, not from the asset itself, so an asset
+ * with nobody recorded against it has no department to count under.
+ */
+function AssetsByDepartment({ assets, onOpen }: { assets: VaultItem[]; onOpen: () => void }) {
+  const rows = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of assets) {
+      const department = item.owner?.department?.trim();
+      if (!department) continue;
+      counts.set(department, (counts.get(department) ?? 0) + 1);
+    }
+    const ranked = [...counts.entries()]
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+      .slice(0, 6);
+    return { ranked, max: Math.max(1, ...ranked.map((r) => r.count)) };
+  }, [assets]);
+
+  if (rows.ranked.length === 0) return null;
+
+  return (
+    <div className="mt-4 space-y-1.5">
+      {rows.ranked.map((row) => (
+        <button key={row.label} type="button" onClick={onOpen} className="block w-full text-left">
+          <div className="flex items-baseline justify-between gap-2 text-[11.5px]">
+            <span className="min-w-0 truncate text-ink-2">{row.label}</span>
+            <span className="shrink-0 font-mono text-ink-3">
+              {row.count} {row.count === 1 ? 'asset' : 'assets'}
+            </span>
+          </div>
+          <div className="mt-1 h-1 w-full">
+            <div
+              className="h-full rounded-full"
+              style={{
+                width: `${Math.max((row.count / rows.max) * 100, 4)}%`,
+                background: 'var(--chart-1)',
               }}
             />
           </div>

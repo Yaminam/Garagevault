@@ -491,7 +491,6 @@ export function Workbench({ identity, onSwitchUser }: Props) {
                       setFilter(next);
                       setView('browse');
                     }}
-                    onView={setView}
                     onOpen={openItem}
                     onNewItem={(kind) => startNew(kind)}
                     onUploadInvoice={() => setImportingInvoices(true)}
