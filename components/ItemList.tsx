@@ -238,7 +238,7 @@ export function ItemList({
                             active ? 'font-medium' : ''
                           }`}
                         >
-                          <Highlight text={item.title} query={query} />
+                          <Highlight text={rowTitle(item)} query={query} />
                         </span>
                         <span className="mt-1 flex items-center gap-1.5 text-[11.5px] leading-tight text-ink-3">
                           <span className="min-w-0 truncate">{subtitleOf(item)}</span>
@@ -278,6 +278,17 @@ export function ItemList({
   );
 }
 
+/**
+ * The bold line. An asset's title is just "make model" now, which makes two
+ * of the same laptop read as identical rows — the category is what actually
+ * distinguishes what you're looking at, so that leads instead.
+ */
+function rowTitle(item: VaultItem): string {
+  if (item.kind !== 'asset') return item.title;
+  const category = item.asset?.category;
+  return category ? (ASSET_CATEGORY_LABEL[category] ?? category) : item.title;
+}
+
 /** The one line under the title that says most about this kind of entry. */
 function subtitleOf(item: VaultItem): string {
   switch (item.kind) {
@@ -290,15 +301,10 @@ function subtitleOf(item: VaultItem): string {
         b.amount != null ? `${b.currency} ${b.amount.toLocaleString()}` : 'No amount';
       return b.vendor ? `${b.vendor} · ${money}` : money;
     }
-    case 'asset': {
-      const a = item.asset;
-      if (!a) return item.entity;
-      // The title is "make model" now, so two of the same laptop read as
-      // identical rows unless the line underneath actually tells them apart.
-      // Category and who has it does that; the tag code on its own did not.
-      const category = a.category ? (ASSET_CATEGORY_LABEL[a.category] ?? a.category) : null;
-      return [category, item.owner?.name ?? 'Unallocated'].filter(Boolean).join(' · ');
-    }
+    case 'asset':
+      // The category is the bold line for an asset (see rowTitle below), so
+      // this carries the specific device and who has it instead.
+      return [item.title, item.owner?.name ?? 'Unallocated'].filter(Boolean).join(' · ');
     default:
       return item.username ?? item.accountType ?? item.entity;
   }
