@@ -92,6 +92,20 @@ export const ASSET_CATEGORY_LABEL: Record<string, string> = Object.fromEntries(
 );
 
 /**
+ * Category -> chart colour, fixed by category id in the same order as the
+ * picker above rather than by count or rank, so re-sorting a chart never
+ * repaints which colour a category means. Only eight hues are validated as
+ * colourblind-distinguishable as a set; a category past that eighth slot
+ * folds to a neutral grey rather than cycling back to a colour already in
+ * use on screen.
+ */
+const CATEGORY_COLOR_VAR: Record<string, string> = Object.fromEntries(
+  CATEGORIES.slice(0, 8).map((c, i) => [c.id, `var(--chart-cat-${i + 1})`]),
+);
+export const categoryColor = (category: string): string =>
+  CATEGORY_COLOR_VAR[category] ?? 'var(--ink-3)';
+
+/**
  * Next free tag for a category, in the form GC-LT-0007.
  *
  * Sequential rather than random so a shelf of labels reads in order, and gaps

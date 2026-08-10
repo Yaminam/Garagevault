@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
+import { animate, motion, useMotionValue, useReducedMotion, useTransform } from 'motion/react';
 import {
   ArrowRight,
   Barcode,
@@ -16,7 +17,7 @@ import {
   UsersThree,
 } from '@phosphor-icons/react/dist/ssr';
 import { excludeOutliers } from '@/lib/spend.ts';
-import { ASSET_CATEGORY_LABEL } from '@/lib/assets.ts';
+import { ASSET_CATEGORY_LABEL, categoryColor } from '@/lib/assets.ts';
 import type { Identity } from '@/lib/identity.ts';
 import { BILLING_CYCLE_LABEL, type ItemKind, type VaultItem } from '@/lib/types.ts';
 import { useVault } from './vault-context.tsx';
@@ -179,6 +180,14 @@ export function DashboardPanel({
     [items],
   );
 
+  // How much actually happened lately — not shown anywhere else, and the
+  // number that answers "has anyone touched this thing this week."
+  const weekActivity = useMemo(() => {
+    const horizon = new Date(Date.now() - 7 * 86_400_000).toISOString();
+    return items.filter((i) => i.updatedAt >= horizon).length;
+  }, [items]);
+
+  const reduce = useReducedMotion();
   const healthTone = audit.health >= 75 ? 'text-strong' : audit.health >= 45 ? 'text-fair' : 'text-weak';
   const healthBar = audit.health >= 75 ? 'bg-strong' : audit.health >= 45 ? 'bg-fair' : 'bg-weak';
 
@@ -190,8 +199,14 @@ export function DashboardPanel({
         <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-ink">
           {firstName ? `Welcome back, ${firstName}` : 'Overview'}
         </h1>
-        <p className="mt-1 text-[13.5px] text-ink-2">
-          {stats.total} entries across the vault. Everything at a glance.
+        <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px] text-ink-2">
+          <span>{stats.total} entries across the vault. Everything at a glance.</span>
+          {weekActivity > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-accent/25 bg-accent/10 px-2 py-0.5 text-[11.5px] font-medium text-accent">
+              <Pulse size={11} weight="bold" />
+              {weekActivity} touched this week
+            </span>
+          )}
         </p>
 
         {/* Quick actions: the three things opening the dashboard usually
@@ -356,12 +371,17 @@ export function DashboardPanel({
 
               <div className="mt-3 flex items-end gap-3">
                 <span className={`font-mono text-[40px] font-medium leading-none ${healthTone}`}>
-                  {audit.health}
+                  <CountUp value={audit.health} />
                 </span>
                 <span className="mb-1 text-[12px] text-ink-3">/ 100</span>
               </div>
               <div className="mt-3 h-1 overflow-hidden rounded-full bg-line-strong">
-                <div className={`h-full rounded-full ${healthBar}`} style={{ width: `${audit.health}%` }} />
+                <motion.div
+                  initial={reduce ? false : { width: 0 }}
+                  animate={{ width: `${audit.health}%` }}
+                  transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+                  className={`h-full rounded-full ${healthBar}`}
+                />
               </div>
 
               <div className="mt-4 space-y-px">
@@ -393,6 +413,16 @@ export function DashboardPanel({
                 ))}
               </div>
             </section>
+
+            {/* What kind of kit is actually out there, at a glance. */}
+            {stats.assets.length > 0 && (
+              <section className="border-t border-line pt-8">
+                <h2 className="text-[13.5px] font-semibold tracking-tight text-ink">
+                  Assets by category
+                </h2>
+                <AssetCategoryBars assets={stats.assets} onOpen={() => onFilter({ kind: 'assets' })} />
+              </section>
+            )}
           </div>
         </div>
       </div>
@@ -401,6 +431,25 @@ export function DashboardPanel({
 }
 
 /* -------------------------------------------------------------- pieces ---- */
+
+/** Counts up from 0 on mount/change rather than just appearing. */
+function CountUp({ value }: { value: number }) {
+  const reduce = useReducedMotion();
+  const mv = useMotionValue(0);
+  const rounded = useTransform(mv, (v) => Math.round(v).toLocaleString());
+
+  useEffect(() => {
+    if (reduce) {
+      mv.set(value);
+      return;
+    }
+    const controls = animate(mv, value, { duration: 0.7, ease: [0.16, 1, 0.3, 1] });
+    return controls.stop;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, reduce]);
+
+  return <motion.span>{rounded}</motion.span>;
+}
 
 function QuickAction({
   icon,
@@ -449,7 +498,9 @@ function Tile({
       className="group border-line px-3.5 py-4 text-left transition-colors [&:not(:last-child)]:border-r hover:bg-hover/50"
     >
       <span className={`${accent} transition-colors group-hover:text-accent`}>{icon}</span>
-      <p className="mt-2.5 font-mono text-[22px] font-medium leading-none text-ink">{value}</p>
+      <p className="mt-2.5 font-mono text-[22px] font-medium leading-none text-ink">
+        <CountUp value={value} />
+      </p>
       <p className="mt-1.5 truncate text-[11.5px] text-ink-3">{label}</p>
     </button>
   );
@@ -557,6 +608,64 @@ function VendorBars({ bills, onOpen }: { bills: VaultItem[]; onOpen: () => void 
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * What kind of kit is out there, ranked by count. Same shape as VendorBars —
+ * a bar means one thing throughout this page — but by category rather than
+ * currency, since a fleet of laptops and a box of chargers are not a total
+ * worth summing.
+ */
+function AssetCategoryBars({ assets, onOpen }: { assets: VaultItem[]; onOpen: () => void }) {
+  const rows = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of assets) {
+      const category = item.asset?.category;
+      if (!category) continue;
+      counts.set(category, (counts.get(category) ?? 0) + 1);
+    }
+    const ranked = [...counts.entries()]
+      .map(([id, count]) => ({
+        id,
+        label: ASSET_CATEGORY_LABEL[id] ?? id,
+        count,
+      }))
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+    return { ranked, max: Math.max(1, ...ranked.map((r) => r.count)) };
+  }, [assets]);
+
+  if (rows.ranked.length === 0) return null;
+
+  return (
+    <div className="mt-4 space-y-1.5">
+      {rows.ranked.map((row) => (
+        <button key={row.id} type="button" onClick={onOpen} className="block w-full text-left">
+          <div className="flex items-baseline justify-between gap-2 text-[11.5px]">
+            <span className="flex min-w-0 items-center gap-1.5 truncate text-ink-2">
+              <span
+                className="h-2 w-2 shrink-0 rounded-full"
+                style={{ background: categoryColor(row.id) }}
+                aria-hidden
+              />
+              <span className="truncate">{row.label}</span>
+            </span>
+            <span className="shrink-0 font-mono text-ink-3">
+              {row.count} {row.count === 1 ? 'unit' : 'units'}
+            </span>
+          </div>
+          <div className="mt-1 h-1 w-full">
+            <div
+              className="h-full rounded-full"
+              style={{
+                width: `${Math.max((row.count / rows.max) * 100, 4)}%`,
+                background: categoryColor(row.id),
+              }}
+            />
+          </div>
+        </button>
+      ))}
     </div>
   );
 }

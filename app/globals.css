@@ -63,6 +63,22 @@
    */
   --chart-1: #e06322;
 
+  /*
+   * A categorical set, for charts distinguishing identity (which asset
+   * category, not "how much"), where the single-hue chart-1 above would
+   * make every row blend into the same bar. Fixed order, never cycled or
+   * reassigned by sort/filter — that order is what keeps adjacent pairs
+   * colourblind-distinguishable, verified rather than eyeballed.
+   */
+  --chart-cat-1: #3987e5;
+  --chart-cat-2: #d95926;
+  --chart-cat-3: #199e70;
+  --chart-cat-4: #c98500;
+  --chart-cat-5: #d55181;
+  --chart-cat-6: #008300;
+  --chart-cat-7: #9085e9;
+  --chart-cat-8: #e66767;
+
   /* Film grain reads as light dust on a dark surface. */
   --grain-opacity: 0.028;
   --grain-blend: normal;
@@ -131,6 +147,17 @@
 
   /* On paper the accent itself is already in band and clears contrast. */
   --chart-1: #d2500f;
+
+  /* Same categorical set as the dark theme — these eight hexes are
+     mode-invariant by design (see palette source). */
+  --chart-cat-1: #2a78d6;
+  --chart-cat-2: #eb6834;
+  --chart-cat-3: #1baf7a;
+  --chart-cat-4: #eda100;
+  --chart-cat-5: #e87ba4;
+  --chart-cat-6: #008300;
+  --chart-cat-7: #4a3aa7;
+  --chart-cat-8: #e34948;
 
   /* Multiply, so the grain darkens the paper instead of fogging it. */
   --grain-opacity: 0.022;
