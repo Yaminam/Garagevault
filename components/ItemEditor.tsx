@@ -44,7 +44,7 @@ import {
   type Owner,
   type VaultItem,
 } from '@/lib/types.ts';
-import { assetQrPayload, assetQrUrl, currentOrigin } from '@/lib/qr.ts';
+import { assetQrPayload, assetQrUrl, currentOrigin, parseAssetQr } from '@/lib/qr.ts';
 import { useVault } from './vault-context.tsx';
 import { AssetLabel, QrCode } from './BarcodeLabel.tsx';
 import { StrengthMeter } from './primitives.tsx';
@@ -1094,10 +1094,11 @@ function AssetQrPreview({ fields }: { fields: ItemFields }) {
   );
   const payload = useMemo(() => assetQrPayload(item), [item]);
   const qrValue = useMemo(() => assetQrUrl(item, currentOrigin()), [item]);
+  const decoded = useMemo(() => parseAssetQr(payload) ?? {}, [payload]);
 
-  const lineCount = payload.split('\n').length - 1;
+  const fieldCount = Object.keys(decoded).length;
   // Below this the label is mostly blank and worth filling in first.
-  const ready = !!fields.asset?.tag && fields.title.trim().length > 0 && lineCount >= 4;
+  const ready = !!fields.asset?.tag && fields.title.trim().length > 0 && fieldCount >= 4;
 
   return (
     <Group title="QR code" hint="This is what goes on the device">
@@ -1109,7 +1110,7 @@ function AssetQrPreview({ fields }: { fields: ItemFields }) {
 
         <div className="min-w-0 flex-1">
           <p className="text-[12.5px] text-ink">
-            Carries {lineCount} {lineCount === 1 ? 'field' : 'fields'} from this form.
+            Carries {fieldCount} {fieldCount === 1 ? 'field' : 'fields'} from this form.
           </p>
           <p className="mt-1 text-[11.5px] leading-relaxed text-ink-3">
             Scanning it opens a page with the fields below — no app, no vault access needed.
@@ -1131,9 +1132,17 @@ function AssetQrPreview({ fields }: { fields: ItemFields }) {
             <summary className="cursor-pointer text-[11.5px] text-ink-3 hover:text-ink-2">
               What the code says
             </summary>
-            <pre className="mt-1.5 max-h-[132px] overflow-auto rounded-[6px] border border-line bg-bg px-2.5 py-2 font-mono text-[10.5px] leading-relaxed text-ink-3">
-              {payload}
-            </pre>
+            {/* The wire format is positional, not text a human reads directly
+                any more (that's what made the printed code smaller and
+                easier for a camera to lock onto), so this shows the decoded
+                fields rather than the raw bytes. */}
+            <div className="mt-1.5 max-h-[132px] overflow-auto rounded-[6px] border border-line bg-bg px-2.5 py-2">
+              {Object.entries(decoded).map(([key, value]) => (
+                <p key={key} className="font-mono text-[10.5px] leading-relaxed text-ink-3">
+                  <span className="text-ink-2">{key}</span>={value}
+                </p>
+              ))}
+            </div>
           </details>
         </div>
       </div>

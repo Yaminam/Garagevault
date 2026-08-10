@@ -23,12 +23,11 @@ const ROWS: { key: string; label: string }[] = [
   { key: 'serial', label: 'Serial' },
   { key: 'status', label: 'Status' },
   { key: 'holder', label: 'Holder' },
-  { key: 'email', label: 'Holder email' },
+  { key: 'department', label: 'Department' },
   { key: 'location', label: 'Location' },
   { key: 'purchased', label: 'Purchased' },
   { key: 'warranty', label: 'Warranty until' },
   { key: 'received', label: 'Received' },
-  { key: 'entity', label: 'Entity' },
 ];
 
 export function AssetQrView() {

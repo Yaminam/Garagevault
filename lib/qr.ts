@@ -15,10 +15,13 @@ import type { AssetStatus, VaultItem } from './types.ts';
 export type QrMatrix = { size: number; dark: (row: number, col: number) => boolean };
 
 /**
- * `M` corrects roughly 15% damage, which is the usual choice for a label that
- * will pick up scuffs but is not going somewhere abrasive.
+ * `L` corrects roughly 7% damage. A label carrying a full URL needs more
+ * modules than the short plain-text payload this used to be, and on a small
+ * printed label a coarser, larger-moduled code that a phone camera can
+ * actually lock onto beats one dense enough to survive a scuff it will
+ * rarely take.
  */
-export function encodeQr(text: string, level: 'L' | 'M' | 'Q' | 'H' = 'M'): QrMatrix {
+export function encodeQr(text: string, level: 'L' | 'M' | 'Q' | 'H' = 'L'): QrMatrix {
   // Type 0 lets the library pick the smallest version that fits.
   const qr = qrcode(0, level);
   qr.addData(text);
@@ -32,50 +35,70 @@ export function encodeQr(text: string, level: 'L' | 'M' | 'Q' | 'H' = 'M'): QrMa
 
 /* --------------------------------------------------------------- payload ---- */
 
-const line = (key: string, value: string | null | undefined) =>
-  value ? `${key}=${String(value).replace(/[\r\n]+/g, ' ').trim()}\n` : '';
-
 /**
- * What the QR on an asset label actually contains.
+ * What the QR on an asset label actually contains, positionally rather than
+ * as `key=value` lines. The verbose form read fine on a camera's own text
+ * preview, but every key name it carried made the encoded URL longer, which
+ * on a small printed label means finer, harder-to-lock-onto modules. This
+ * format exists only to round-trip through `parseAssetQr` below, so there is
+ * no reason to spend bytes on labels a human never sees directly.
  *
- * Plain `key=value` lines rather than JSON, so any phone camera shows something
- * a human can read without an app. Deliberately excludes anything secret: a
- * label is on the outside of a device that walks out of the building.
+ * Email and entity are dropped: entity is the same for every asset in this
+ * vault, and email doesn't apply to a piece of hardware in the first place.
  */
+const FIELDS = [
+  'tag',
+  'name',
+  'category',
+  'make',
+  'model',
+  'serial',
+  'status',
+  'holder',
+  'department',
+  'location',
+  'purchased',
+  'warranty',
+  'received',
+] as const;
+
+const clean = (value: string | null | undefined) =>
+  value ? String(value).replace(/[\r\n\x1f]+/g, ' ').trim() : '';
+
 export function assetQrPayload(item: VaultItem): string {
   const asset = item.asset;
   if (!asset) return '';
 
-  return (
-    'GARAGE-ASSET\n' +
-    line('tag', asset.tag) +
-    line('name', item.title) +
-    line('category', asset.category) +
-    line('make', asset.make) +
-    line('model', asset.model) +
-    line('serial', asset.serial) +
-    line('status', asset.status) +
-    line('entity', item.entity) +
-    line('holder', item.owner?.name) +
-    line('department', item.owner?.department) +
-    line('location', asset.location) +
-    line('purchased', asset.purchasedOn) +
-    line('warranty', asset.warrantyUntil) +
-    line('received', asset.received ? (asset.receivedOn ?? 'yes') : 'no')
-  ).trimEnd();
+  const values: Record<(typeof FIELDS)[number], string> = {
+    tag: clean(asset.tag),
+    name: clean(item.title),
+    category: clean(asset.category),
+    make: clean(asset.make),
+    model: clean(asset.model),
+    serial: clean(asset.serial),
+    status: clean(asset.status),
+    holder: clean(item.owner?.name),
+    department: clean(item.owner?.department),
+    location: clean(asset.location),
+    purchased: clean(asset.purchasedOn),
+    warranty: clean(asset.warrantyUntil),
+    received: clean(asset.received ? (asset.receivedOn ?? 'yes') : 'no'),
+  };
+
+  return FIELDS.map((key) => values[key]).join('\x1f');
 }
 
-/** Parse a payload back, for the scanner. Unknown keys are kept. */
+/** Parse a payload back, for the page the QR opens. */
 export function parseAssetQr(text: string): Record<string, string> | null {
-  const rows = text.split(/\r?\n/).map((row) => row.trim()).filter(Boolean);
-  if (rows[0] !== 'GARAGE-ASSET') return null;
+  if (!text) return null;
+  const parts = text.split('\x1f');
+  if (parts.length < FIELDS.length) return null;
 
   const out: Record<string, string> = {};
-  for (const row of rows.slice(1)) {
-    const at = row.indexOf('=');
-    if (at > 0) out[row.slice(0, at)] = row.slice(at + 1);
-  }
-  return out;
+  FIELDS.forEach((key, i) => {
+    if (parts[i]) out[key] = parts[i];
+  });
+  return Object.keys(out).length > 0 ? out : null;
 }
 
 /* ------------------------------------------------------------------ url ---- */

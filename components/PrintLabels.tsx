@@ -53,7 +53,12 @@ export function PrintLabels({ items, onClose }: { items: VaultItem[]; onClose: (
   );
 
   const sheet = useMemo(() => {
-    const chosen = assets.filter((asset) => selected.has(asset.id));
+    // Everything starts selected, so a filter with no effect here would look
+    // broken: it would narrow the pills on offer while the sheet underneath
+    // kept printing all of them regardless. Intersecting with the filtered
+    // list makes the filter actually control what's shown and printed, and
+    // individual pills still narrow further within that.
+    const chosen = visible.filter((asset) => selected.has(asset.id));
     return chosen.flatMap((asset) =>
       Array.from({ length: copies }, (_, copy) => ({
         key: `${asset.id}-${copy}`,
@@ -68,7 +73,7 @@ export function PrintLabels({ items, onClose }: { items: VaultItem[]; onClose: (
         qr: assetQrUrl(asset, currentOrigin()),
       })),
     );
-  }, [assets, selected, copies]);
+  }, [visible, selected, copies]);
 
   const toggle = (id: string) =>
     setSelected((current) => {
