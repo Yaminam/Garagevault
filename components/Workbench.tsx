@@ -493,6 +493,8 @@ export function Workbench({ identity, onSwitchUser }: Props) {
                     }}
                     onView={setView}
                     onOpen={openItem}
+                    onNewItem={(kind) => startNew(kind)}
+                    onUploadInvoice={() => setImportingInvoices(true)}
                   />
                 ) : view === 'health' ? (
                   <HealthPanel onOpen={openItem} />

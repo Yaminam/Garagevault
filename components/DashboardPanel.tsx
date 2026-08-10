@@ -5,20 +5,23 @@ import {
   ArrowRight,
   Barcode,
   CaretRight,
+  FileArrowUp,
   FileText,
   Key,
   Package,
   Pulse,
   Receipt,
   ShieldWarning,
+  UserPlus,
   UsersThree,
 } from '@phosphor-icons/react/dist/ssr';
 import { excludeOutliers } from '@/lib/spend.ts';
 import { ASSET_CATEGORY_LABEL } from '@/lib/assets.ts';
 import type { Identity } from '@/lib/identity.ts';
-import { BILLING_CYCLE_LABEL, type VaultItem } from '@/lib/types.ts';
+import { BILLING_CYCLE_LABEL, type ItemKind, type VaultItem } from '@/lib/types.ts';
 import { useVault } from './vault-context.tsx';
 import { Monogram } from './primitives.tsx';
+import { SpendChart } from './SpendChart.tsx';
 
 /**
  * The landing view.
@@ -42,6 +45,8 @@ type Props = {
   onFilter: (jump: Jump) => void;
   onView: (view: 'health' | 'allocation') => void;
   onOpen: (id: string) => void;
+  onNewItem: (kind: ItemKind) => void;
+  onUploadInvoice: () => void;
 };
 
 /** Group amounts by currency, since a vault mixes USD and INR. */
@@ -87,7 +92,14 @@ function describeUpdate(item: VaultItem): string {
   }
 }
 
-export function DashboardPanel({ identity, onFilter, onView, onOpen }: Props) {
+export function DashboardPanel({
+  identity,
+  onFilter,
+  onView,
+  onOpen,
+  onNewItem,
+  onUploadInvoice,
+}: Props) {
   const { items, audit } = useVault();
 
   const stats = useMemo(() => {
@@ -139,17 +151,23 @@ export function DashboardPanel({ identity, onFilter, onView, onOpen }: Props) {
     };
   }, [items]);
 
-  // Renewals in the next 30 days, soonest first.
-  const renewals = useMemo(() => {
+  // Bills renewing and warranties running out in the next 30 days, merged
+  // into one timeline: both are a countdown to something that needs a
+  // decision, and splitting them into two short lists just to say "nothing
+  // due" twice told you less than one list would.
+  const expiring = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
     const horizon = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
-    return items
-      .filter((i) => {
-        const d = i.billing?.nextRenewal;
-        return d && d >= today && d <= horizon;
-      })
-      .sort((a, b) => (a.billing!.nextRenewal! < b.billing!.nextRenewal! ? -1 : 1))
-      .slice(0, 6);
+
+    const bills = items
+      .filter((i) => i.billing?.nextRenewal && i.billing.nextRenewal >= today && i.billing.nextRenewal <= horizon)
+      .map((i) => ({ item: i, date: i.billing!.nextRenewal!, renewal: true }));
+
+    const warranties = items
+      .filter((i) => i.asset?.warrantyUntil && i.asset.warrantyUntil >= today && i.asset.warrantyUntil <= horizon)
+      .map((i) => ({ item: i, date: i.asset!.warrantyUntil!, renewal: false }));
+
+    return [...bills, ...warranties].sort((a, b) => (a.date < b.date ? -1 : 1)).slice(0, 6);
   }, [items]);
 
   // Most recently touched, as a "where was I" list.
@@ -176,6 +194,27 @@ export function DashboardPanel({ identity, onFilter, onView, onOpen }: Props) {
           {stats.total} entries across the vault. Everything at a glance.
         </p>
 
+        {/* Quick actions: the three things opening the dashboard usually
+            means doing something about, one click away instead of a detour
+            through the sidebar. */}
+        <div className="mt-5 flex flex-wrap gap-2">
+          <QuickAction
+            icon={<Barcode size={14} weight="bold" />}
+            label="Add asset"
+            onClick={() => onNewItem('asset')}
+          />
+          <QuickAction
+            icon={<UserPlus size={14} weight="bold" />}
+            label="Add person"
+            onClick={() => onNewItem('person')}
+          />
+          <QuickAction
+            icon={<FileArrowUp size={14} weight="bold" />}
+            label="Upload invoice"
+            onClick={onUploadInvoice}
+          />
+        </div>
+
         {/*
           One continuous band split by hairlines rather than six bordered
           cards. The counts are the content; a box around each one added a
@@ -190,147 +229,171 @@ export function DashboardPanel({ identity, onFilter, onView, onOpen }: Props) {
           <Tile icon={<UsersThree size={16} weight="bold" />} label="People" value={stats.people} onClick={() => onFilter({ kind: 'people' })} />
         </div>
 
-        {/* Two regions side by side, divided by a rule rather than boxed. */}
+        {/* Two independently-flowing columns, not two side-by-side row-pairs.
+            Grid rows are only ever as tall as their tallest cell, so pairing
+            "Spend beside Security" and "Expiring soon beside Recently
+            updated" as two separate row-groups left Security (reliably
+            shorter than Spend's vendor list) stranded with a slab of empty
+            grid track before the next row could start — align-items alone
+            can't fix that, since the row track itself stays tall regardless
+            of whether the shorter item stretches into it. Stacking each
+            side's two sections inside its own flex column instead means a
+            short right side just ends sooner; the leftover space happens
+            once, at the very bottom, the way two columns of unequal length
+            are supposed to look. */}
         <div className="mt-8 grid gap-8 lg:grid-cols-[1.2fr_1fr] lg:gap-10 lg:divide-x lg:divide-line">
-          {/* Spend */}
-          <section className="lg:pr-10">
-            <div className="flex items-center justify-between">
-              <h2 className="text-[13.5px] font-semibold tracking-tight text-ink">Spend</h2>
-              <button
-                type="button"
-                onClick={() => onFilter({ kind: 'billing' })}
-                className="flex items-center gap-1 text-[11.5px] text-ink-3 hover:text-ink"
-              >
-                All bills <ArrowRight size={11} weight="bold" />
-              </button>
-            </div>
-
-            {/* Was a bordered grid inside a bordered card. Two figures do not
-                need a container each, let alone a container inside a
-                container. Every currency is listed: a rupee total and a dollar
-                total are both true, and adding them would not be. */}
-            <div className="mt-4 grid grid-cols-2 gap-6">
-              <div>
-                <p className="label-caps">This month</p>
-                {stats.thisMonth.length === 0 ? (
-                  <p className="mt-2 text-[13px] text-ink-3">Nothing yet</p>
-                ) : (
-                  stats.thisMonth.map(([ccy, n]) => (
-                    <p key={ccy} className="mt-1.5 font-mono text-[15px] font-medium text-ink">
-                      {money(ccy, n)}
-                    </p>
-                  ))
-                )}
-              </div>
-              <div>
-                <p className="label-caps">Recurring</p>
-                {stats.recurring.length === 0 ? (
-                  <p className="mt-2 text-[13px] text-ink-3">None marked</p>
-                ) : (
-                  stats.recurring.map(([ccy, n]) => (
-                    <p key={ccy} className="mt-1.5 font-mono text-[15px] font-medium text-ink">
-                      {money(ccy, n)}
-                    </p>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {stats.dropped > 0 && (
-              <p className="mt-3 text-[11px] leading-snug text-ink-3">
-                {stats.dropped} one-off {stats.dropped === 1 ? 'bill is' : 'bills are'} left out,
-                an order of magnitude above the rest.
-              </p>
-            )}
-
-            {/* Vendor breakdown, biggest first. */}
-            <VendorBars bills={stats.bills} onOpen={() => onFilter({ kind: 'billing' })} />
-          </section>
-
-          {/* Health */}
-          <section>
-            <div className="flex items-center justify-between">
-              <h2 className="text-[13.5px] font-semibold tracking-tight text-ink">Security</h2>
-              <button
-                type="button"
-                onClick={() => onView('health')}
-                className="flex items-center gap-1 text-[11.5px] text-ink-3 hover:text-ink"
-              >
-                Review <ArrowRight size={11} weight="bold" />
-              </button>
-            </div>
-
-            <div className="mt-3 flex items-end gap-3">
-              <span className={`font-mono text-[40px] font-medium leading-none ${healthTone}`}>
-                {audit.health}
-              </span>
-              <span className="mb-1 text-[12px] text-ink-3">/ 100</span>
-            </div>
-            <div className="mt-3 h-1 overflow-hidden rounded-full bg-line-strong">
-              <div className={`h-full rounded-full ${healthBar}`} style={{ width: `${audit.health}%` }} />
-            </div>
-
-            <div className="mt-4 space-y-px">
-              <HealthRow label="Weak or critical" count={audit.fragile.length} onClick={() => onView('health')} />
-              <HealthRow label="Reused" count={audit.reused.length} onClick={() => onView('health')} />
-              <HealthRow label="Missing a password" count={audit.incomplete.length} onClick={() => onView('health')} />
-              <HealthRow label="Assets not received" count={stats.notReceived} icon={<Package size={13} weight="bold" />} onClick={() => onFilter({ kind: 'assets' })} />
-              <HealthRow label="Warranty expiring in 30 days" count={stats.warrantyExpiring} icon={<Pulse size={13} weight="bold" />} onClick={() => onFilter({ kind: 'assets' })} />
-            </div>
-          </section>
-        </div>
-
-        <div className="mt-8 grid gap-8 border-t border-line pt-8 lg:grid-cols-2 lg:gap-10 lg:divide-x lg:divide-line">
-          {/* Renewals */}
-          <section className="lg:pr-10">
-            <h2 className="text-[13.5px] font-semibold tracking-tight text-ink">Renewing soon</h2>
-            {renewals.length === 0 ? (
-              <p className="mt-3 text-[12.5px] text-ink-3">Nothing due in the next 30 days.</p>
-            ) : (
-              <div className="mt-3 space-y-px">
-                {renewals.map((bill) => {
-                  const days = Math.ceil(
-                    (new Date(bill.billing!.nextRenewal!).getTime() - Date.now()) / 86_400_000,
-                  );
-                  return (
-                    <button
-                      key={bill.id}
-                      type="button"
-                      onClick={() => onOpen(bill.id)}
-                      className="flex w-full items-center gap-3 rounded-[6px] px-2 py-1.5 text-left transition hover:bg-hover"
-                    >
-                      <Receipt size={14} weight="bold" className="shrink-0 text-ink-3" />
-                      <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink">{bill.title}</span>
-                      <span className={`shrink-0 text-[11.5px] ${days <= 7 ? 'text-fair' : 'text-ink-3'}`}>
-                        {days === 0 ? 'today' : `${days}d`}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-
-          {/* Recent */}
-          <section>
-            <h2 className="text-[13.5px] font-semibold tracking-tight text-ink">Recently updated</h2>
-            <div className="mt-3 space-y-px">
-              {recent.map((item) => (
+          {/* Left: Spend, then Expiring soon */}
+          <div className="flex flex-col gap-8 lg:pr-10">
+            <section>
+              <div className="flex items-center justify-between">
+                <h2 className="text-[13.5px] font-semibold tracking-tight text-ink">Spend</h2>
                 <button
-                  key={item.id}
                   type="button"
-                  onClick={() => onOpen(item.id)}
-                  className="flex w-full items-center gap-3 rounded-[6px] px-2 py-1.5 text-left transition hover:bg-hover"
+                  onClick={() => onFilter({ kind: 'billing' })}
+                  className="flex items-center gap-1 text-[11.5px] text-ink-3 hover:text-ink"
                 >
-                  <Monogram label={item.title} size="sm" />
-                  <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink">
-                    {describeUpdate(item)}
-                  </span>
-                  <CaretRight size={12} weight="bold" className="shrink-0 text-ink-3" />
+                  All bills <ArrowRight size={11} weight="bold" />
                 </button>
-              ))}
-            </div>
-          </section>
+              </div>
+
+              {/* The trend, not just the total: nine months of bars says more
+                  at a glance than two numbers ever could. */}
+              <div className="mt-4">
+                <SpendChart items={items} onOpen={() => onFilter({ kind: 'billing' })} />
+              </div>
+
+              {/* Was a bordered grid inside a bordered card. Two figures do not
+                  need a container each, let alone a container inside a
+                  container. Every currency is listed: a rupee total and a dollar
+                  total are both true, and adding them would not be. */}
+              <div className="mt-4 grid grid-cols-2 gap-6">
+                <div>
+                  <p className="label-caps">This month</p>
+                  {stats.thisMonth.length === 0 ? (
+                    <p className="mt-2 text-[13px] text-ink-3">Nothing yet</p>
+                  ) : (
+                    stats.thisMonth.map(([ccy, n]) => (
+                      <p key={ccy} className="mt-1.5 font-mono text-[15px] font-medium text-ink">
+                        {money(ccy, n)}
+                      </p>
+                    ))
+                  )}
+                </div>
+                <div>
+                  <p className="label-caps">Recurring</p>
+                  {stats.recurring.length === 0 ? (
+                    <p className="mt-2 text-[13px] text-ink-3">None marked</p>
+                  ) : (
+                    stats.recurring.map(([ccy, n]) => (
+                      <p key={ccy} className="mt-1.5 font-mono text-[15px] font-medium text-ink">
+                        {money(ccy, n)}
+                      </p>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {stats.dropped > 0 && (
+                <p className="mt-3 text-[11px] leading-snug text-ink-3">
+                  {stats.dropped} one-off {stats.dropped === 1 ? 'bill is' : 'bills are'} left out,
+                  an order of magnitude above the rest.
+                </p>
+              )}
+
+              {/* Vendor breakdown, biggest first. */}
+              <VendorBars bills={stats.bills} onOpen={() => onFilter({ kind: 'billing' })} />
+            </section>
+
+            {/* Expiring: bills renewing and warranties running out, one timeline */}
+            <section className="border-t border-line pt-8">
+              <h2 className="text-[13.5px] font-semibold tracking-tight text-ink">Expiring soon</h2>
+              {expiring.length === 0 ? (
+                <p className="mt-3 text-[12.5px] text-ink-3">Nothing due in the next 30 days.</p>
+              ) : (
+                <div className="mt-3 space-y-px">
+                  {expiring.map(({ item, date, renewal }) => {
+                    const days = Math.ceil((new Date(date).getTime() - Date.now()) / 86_400_000);
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => onOpen(item.id)}
+                        className="flex w-full items-center gap-3 rounded-[6px] px-2 py-1.5 text-left transition hover:-translate-y-px hover:bg-hover"
+                      >
+                        {renewal ? (
+                          <Receipt size={14} weight="bold" className="shrink-0 text-ink-3" />
+                        ) : (
+                          <Barcode size={14} weight="bold" className="shrink-0 text-ink-3" />
+                        )}
+                        <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink">{item.title}</span>
+                        <span className="shrink-0 text-[10.5px] text-ink-3">
+                          {renewal ? 'renews' : 'warranty'}
+                        </span>
+                        <span className={`shrink-0 text-[11.5px] ${days <= 7 ? 'text-fair' : 'text-ink-3'}`}>
+                          {days <= 0 ? 'today' : `${days}d`}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          </div>
+
+          {/* Right: Security, then Recently updated */}
+          <div className="flex flex-col gap-8">
+            <section>
+              <div className="flex items-center justify-between">
+                <h2 className="text-[13.5px] font-semibold tracking-tight text-ink">Security</h2>
+                <button
+                  type="button"
+                  onClick={() => onView('health')}
+                  className="flex items-center gap-1 text-[11.5px] text-ink-3 hover:text-ink"
+                >
+                  Review <ArrowRight size={11} weight="bold" />
+                </button>
+              </div>
+
+              <div className="mt-3 flex items-end gap-3">
+                <span className={`font-mono text-[40px] font-medium leading-none ${healthTone}`}>
+                  {audit.health}
+                </span>
+                <span className="mb-1 text-[12px] text-ink-3">/ 100</span>
+              </div>
+              <div className="mt-3 h-1 overflow-hidden rounded-full bg-line-strong">
+                <div className={`h-full rounded-full ${healthBar}`} style={{ width: `${audit.health}%` }} />
+              </div>
+
+              <div className="mt-4 space-y-px">
+                <HealthRow label="Weak or critical" count={audit.fragile.length} onClick={() => onView('health')} />
+                <HealthRow label="Reused" count={audit.reused.length} onClick={() => onView('health')} />
+                <HealthRow label="Missing a password" count={audit.incomplete.length} onClick={() => onView('health')} />
+                <HealthRow label="Assets not received" count={stats.notReceived} icon={<Package size={13} weight="bold" />} onClick={() => onFilter({ kind: 'assets' })} />
+                <HealthRow label="Warranty expiring in 30 days" count={stats.warrantyExpiring} icon={<Pulse size={13} weight="bold" />} onClick={() => onFilter({ kind: 'assets' })} />
+              </div>
+            </section>
+
+            {/* Recent */}
+            <section className="border-t border-line pt-8">
+              <h2 className="text-[13.5px] font-semibold tracking-tight text-ink">Recently updated</h2>
+              <div className="mt-3 space-y-px">
+                {recent.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => onOpen(item.id)}
+                    className="flex w-full items-center gap-3 rounded-[6px] px-2 py-1.5 text-left transition hover:-translate-y-px hover:bg-hover"
+                  >
+                    <Monogram label={item.title} size="sm" />
+                    <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink">
+                      {describeUpdate(item)}
+                    </span>
+                    <CaretRight size={12} weight="bold" className="shrink-0 text-ink-3" />
+                  </button>
+                ))}
+              </div>
+            </section>
+          </div>
         </div>
       </div>
     </div>
@@ -338,6 +401,27 @@ export function DashboardPanel({ identity, onFilter, onView, onOpen }: Props) {
 }
 
 /* -------------------------------------------------------------- pieces ---- */
+
+function QuickAction({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-[12px] font-medium text-ink-2 transition hover:-translate-y-px hover:border-line-strong hover:text-ink active:translate-y-0"
+    >
+      <span className="text-ink-3">{icon}</span>
+      {label}
+    </button>
+  );
+}
 
 function Tile({
   icon,
