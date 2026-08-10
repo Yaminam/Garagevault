@@ -12,7 +12,6 @@ import {
   Receipt,
   ShieldWarning,
   UsersThree,
-  WarningCircle,
 } from '@phosphor-icons/react/dist/ssr';
 import { excludeOutliers } from '@/lib/spend.ts';
 import { ASSET_CATEGORY_LABEL } from '@/lib/assets.ts';
@@ -162,13 +161,6 @@ export function DashboardPanel({ identity, onFilter, onView, onOpen }: Props) {
     [items],
   );
 
-  const attention =
-    audit.fragile.length +
-    audit.reused.length +
-    audit.incomplete.length +
-    stats.notReceived +
-    stats.warrantyExpiring;
-
   const healthTone = audit.health >= 75 ? 'text-strong' : audit.health >= 45 ? 'text-fair' : 'text-weak';
   const healthBar = audit.health >= 75 ? 'bg-strong' : audit.health >= 45 ? 'bg-fair' : 'bg-weak';
 
@@ -190,13 +182,12 @@ export function DashboardPanel({ identity, onFilter, onView, onOpen }: Props) {
           rectangle per number and no meaning, and six identical cards in a row
           is the most templated shape a dashboard can open with.
         */}
-        <div className="mt-7 grid grid-cols-2 border-y border-line sm:grid-cols-3 lg:grid-cols-6">
+        <div className="mt-7 grid grid-cols-2 border-y border-line sm:grid-cols-3 lg:grid-cols-5">
           <Tile icon={<Key size={16} weight="bold" />} label="Logins" value={stats.logins} onClick={() => onFilter({ kind: 'logins' })} />
           <Tile icon={<FileText size={16} weight="bold" />} label="Environments" value={stats.envs} onClick={() => onFilter({ kind: 'environments' })} />
           <Tile icon={<Receipt size={16} weight="bold" />} label="Bills" value={stats.billsCount} onClick={() => onFilter({ kind: 'billing' })} />
           <Tile icon={<Barcode size={16} weight="bold" />} label="Assets" value={stats.assetsCount} onClick={() => onFilter({ kind: 'assets' })} />
           <Tile icon={<UsersThree size={16} weight="bold" />} label="People" value={stats.people} onClick={() => onFilter({ kind: 'people' })} />
-          <Tile icon={<WarningCircle size={16} weight="bold" />} label="Needs attention" value={attention} tone={attention > 0 ? 'warn' : 'ok'} onClick={() => onView('health')} />
         </div>
 
         {/* Two regions side by side, divided by a rule rather than boxed. */}
